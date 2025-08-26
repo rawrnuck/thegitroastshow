@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
 import LoadingAnimation from "./components/LoadingAnimation.jsx";
 import GitHubInput from "./components/GitHubInput.jsx";
 import TypewriterText from "./components/TypewriterText.jsx";
 import ErrorBoundary from "./components/ErrorBoundary.jsx";
 import APITestComponent from "./components/APITestComponent";
+import PageTransition from "./components/PageTransition";
 import { useRoastFlow } from "./hooks/useRoastAPI";
 import "./App.css";
 
@@ -128,165 +130,177 @@ function App() {
           </div>
         )}
 
-        {/* Regular app states */}
+        {/* Regular app states with smooth transitions */}
         {appState !== "test" && (
           <>
             {/* Matrix background - always present */}
             <div className="matrix-bg" />
 
-            {/* Initial Loading State */}
-            {appState === "loading" && (
-              <LoadingAnimation
-                type="initial"
-                onComplete={() => setAppState("input")}
-              />
-            )}
+            <AnimatePresence mode="wait">
+              {/* Initial Loading State */}
+              {appState === "loading" && (
+                <PageTransition key="loading">
+                  <LoadingAnimation
+                    type="initial"
+                    onComplete={() => setAppState("input")}
+                  />
+                </PageTransition>
+              )}
 
-            {/* Input State */}
-            {appState === "input" && (
-              <GitHubInput onSubmit={handleUsernameSubmit} />
-            )}
+              {/* Input State */}
+              {appState === "input" && (
+                <PageTransition key="input">
+                  <GitHubInput onSubmit={handleUsernameSubmit} />
+                </PageTransition>
+              )}
 
-            {/* Processing State */}
-            {appState === "processing" && (
-              <LoadingAnimation
-                type="processing"
-                onComplete={handleProcessingComplete}
-              />
-            )}
+              {/* Processing State */}
+              {appState === "processing" && (
+                <PageTransition key="processing">
+                  <LoadingAnimation
+                    type="processing"
+                    onComplete={handleProcessingComplete}
+                  />
+                </PageTransition>
+              )}
 
-            {/* Error State */}
-            {appState === "error" && (
-              <div className="min-h-screen flex items-center justify-center relative">
-                <div className="max-w-2xl mx-auto p-8 relative z-10 text-center">
-                  <h1 className="text-4xl md:text-6xl font-bold font-mono text-red-500 text-glow-strong mb-4">
-                    ROAST FAILED
-                  </h1>
-                  <div className="bg-bg-darker border border-red-500 border-opacity-30 rounded-lg p-6 border-glow mb-8">
-                    <p className="text-red-400 font-mono text-lg mb-4">
-                      🚨 ERROR: {errorMessage}
-                    </p>
-                    <p className="text-primary-dark font-mono text-sm">
-                      {isBackendHealthy === false
-                        ? "Backend server is offline. Please check the connection."
-                        : "Unable to roast this target. Maybe they're too good to roast?"}
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleNewRoast}
-                    className="
-                      px-8 py-3 bg-transparent border-2 border-red-500
-                      text-red-500 font-mono font-bold rounded-lg
-                      hover:bg-red-500 hover:text-bg-dark
-                      transition-all duration-300 terminal-button
-                    "
-                  >
-                    TRY ANOTHER TARGET
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Roast Display State */}
-            {appState === "roast" && (
-              <div className="min-h-screen flex items-center justify-center relative">
-                {/* Floating particles */}
-                <div className="absolute inset-0 pointer-events-none">
-                  {Array.from({ length: 25 }, (_, i) => (
-                    <div
-                      key={i}
-                      className="particle"
-                      style={{
-                        left: `${Math.random() * 100}%`,
-                        top: `${Math.random() * 100}%`,
-                        animationDelay: `${Math.random() * 3}s`,
-                        animationDuration: `${3 + Math.random() * 2}s`,
-                      }}
-                    />
-                  ))}
-                </div>
-
-                <div className="max-w-4xl mx-auto p-8 relative z-10">
-                  {/* Header */}
-                  <div className="text-center mb-12">
-                    <h1 className="text-4xl md:text-6xl font-bold font-mono text-primary-teal text-glow-strong mb-4">
-                      ROAST COMPLETE
-                    </h1>
-                    <div className="text-lg font-mono text-accent-cyan text-glow">
-                      Target:{" "}
-                      <span className="text-primary-green">{username}</span>
+              {/* Error State */}
+              {appState === "error" && (
+                <PageTransition key="error">
+                  <div className="min-h-screen flex items-center justify-center relative">
+                    <div className="max-w-2xl mx-auto p-8 relative z-10 text-center">
+                      <h1 className="text-4xl md:text-6xl font-bold font-mono text-red-500 text-glow-strong mb-4">
+                        ROAST FAILED
+                      </h1>
+                      <div className="bg-bg-darker border border-red-500 border-opacity-30 rounded-lg p-6 border-glow mb-8">
+                        <p className="text-red-400 font-mono text-lg mb-4">
+                          🚨 ERROR: {errorMessage}
+                        </p>
+                        <p className="text-primary-dark font-mono text-sm">
+                          {isBackendHealthy === false
+                            ? "Backend server is offline. Please check the connection."
+                            : "Unable to roast this target. Maybe they're too good to roast?"}
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleNewRoast}
+                        className="
+                          px-8 py-3 bg-transparent border-2 border-red-500
+                          text-red-500 font-mono font-bold rounded-lg
+                          hover:bg-red-500 hover:text-bg-dark
+                          transition-all duration-300 terminal-button
+                        "
+                      >
+                        TRY ANOTHER TARGET
+                      </button>
                     </div>
                   </div>
+                </PageTransition>
+              )}
 
-                  {/* Terminal Window for Roast */}
-                  <div className="bg-bg-darker border border-primary-teal border-opacity-30 rounded-lg p-8 border-glow-strong">
-                    {/* Terminal Header */}
-                    <div className="flex items-center justify-between mb-6 pb-4 border-b border-primary-teal border-opacity-20">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                        <span className="text-primary-dark font-mono text-sm ml-4">
-                          roast-output.txt
-                        </span>
-                      </div>
-                      <div className="text-xs font-mono text-primary-dark">
-                        {new Date().toLocaleString()}
-                      </div>
+              {/* Roast Display State */}
+              {appState === "roast" && (
+                <PageTransition key="roast">
+                  <div className="min-h-screen flex items-center justify-center relative">
+                    {/* Floating particles */}
+                    <div className="absolute inset-0 pointer-events-none">
+                      {Array.from({ length: 25 }, (_, i) => (
+                        <div
+                          key={i}
+                          className="particle"
+                          style={{
+                            left: `${Math.random() * 100}%`,
+                            top: `${Math.random() * 100}%`,
+                            animationDelay: `${Math.random() * 3}s`,
+                            animationDuration: `${3 + Math.random() * 2}s`,
+                          }}
+                        />
+                      ))}
                     </div>
 
-                    {/* Roast Content */}
-                    <TypewriterText
-                      text={roastText}
-                      speed={30}
-                      onComplete={handleTypewriterComplete}
-                      canRestart={true}
-                    />
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="text-center mt-8 space-y-4">
-                    <button
-                      onClick={handleNewRoast}
-                      className="
-                        px-8 py-3 bg-transparent border-2 border-primary-teal
-                        text-primary-teal font-mono font-bold rounded-lg
-                        hover:bg-primary-teal hover:text-bg-dark
-                        transition-all duration-300 terminal-button mr-4
-                      "
-                    >
-                      ROAST ANOTHER VICTIM
-                    </button>
-
-                    {/* Show backend stats if available */}
-                    {roastStats && (
-                      <div className="text-xs font-mono text-primary-dark mt-4 space-y-1">
-                        <div>
-                          [DAMAGE ASSESSMENT] Repositories analyzed:{" "}
-                          {roastStats.totalRepos} | Stars collected:{" "}
-                          {roastStats.totalStars}
-                        </div>
-                        <div>
-                          Commits examined: {roastStats.totalCommits} | Primary
-                          language: {roastStats.topLanguage}
-                        </div>
-                        <div>
-                          Account age: {roastStats.accountAge} years | Empty
-                          repos: {roastStats.emptyRepos}
+                    <div className="max-w-4xl mx-auto p-8 relative z-10">
+                      {/* Header */}
+                      <div className="text-center mb-12">
+                        <h1 className="text-4xl md:text-6xl font-bold font-mono text-primary-teal text-glow-strong mb-4">
+                          ROAST COMPLETE
+                        </h1>
+                        <div className="text-lg font-mono text-accent-cyan text-glow">
+                          Target:{" "}
+                          <span className="text-primary-green">{username}</span>
                         </div>
                       </div>
-                    )}
 
-                    {!roastStats && (
-                      <div className="text-xs font-mono text-primary-dark mt-4">
-                        [DAMAGE ASSESSMENT] Ego destruction: 100% | Recovery
-                        time: Unknown
+                      {/* Terminal Window for Roast */}
+                      <div className="bg-bg-darker border border-primary-teal border-opacity-30 rounded-lg p-8 border-glow-strong">
+                        {/* Terminal Header */}
+                        <div className="flex items-center justify-between mb-6 pb-4 border-b border-primary-teal border-opacity-20">
+                          <div className="flex items-center space-x-2">
+                            <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                            <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                            <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                            <span className="text-primary-dark font-mono text-sm ml-4">
+                              roast-output.txt
+                            </span>
+                          </div>
+                          <div className="text-xs font-mono text-primary-dark">
+                            {new Date().toLocaleString()}
+                          </div>
+                        </div>
+
+                        {/* Roast Content */}
+                        <TypewriterText
+                          text={roastText}
+                          speed={30}
+                          onComplete={handleTypewriterComplete}
+                          canRestart={true}
+                        />
                       </div>
-                    )}
+
+                      {/* Action buttons */}
+                      <div className="text-center mt-8 space-y-4">
+                        <button
+                          onClick={handleNewRoast}
+                          className="
+                            px-8 py-3 bg-transparent border-2 border-primary-teal
+                            text-primary-teal font-mono font-bold rounded-lg
+                            hover:bg-primary-teal hover:text-bg-dark
+                            transition-all duration-300 terminal-button mr-4
+                          "
+                        >
+                          ROAST ANOTHER VICTIM
+                        </button>
+
+                        {/* Show backend stats if available */}
+                        {roastStats && (
+                          <div className="text-xs font-mono text-primary-dark mt-4 space-y-1">
+                            <div>
+                              [DAMAGE ASSESSMENT] Repositories analyzed:{" "}
+                              {roastStats.totalRepos} | Stars collected:{" "}
+                              {roastStats.totalStars}
+                            </div>
+                            <div>
+                              Commits examined: {roastStats.totalCommits} |
+                              Primary language: {roastStats.topLanguage}
+                            </div>
+                            <div>
+                              Account age: {roastStats.accountAge} years | Empty
+                              repos: {roastStats.emptyRepos}
+                            </div>
+                          </div>
+                        )}
+
+                        {!roastStats && (
+                          <div className="text-xs font-mono text-primary-dark mt-4">
+                            [DAMAGE ASSESSMENT] Ego destruction: 100% | Recovery
+                            time: Unknown
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              </div>
-            )}
+                </PageTransition>
+              )}
+            </AnimatePresence>
           </>
         )}
       </div>

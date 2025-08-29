@@ -36,27 +36,33 @@ export function useRoastGeneration() {
   const [error, setError] = useState<string | null>(null);
   const [roastData, setRoastData] = useState<RoastResponse | null>(null);
 
-  const generateRoast = useCallback(async (username: string, variants = 1) => {
-    if (!username?.trim()) {
-      setError("Username is required");
-      return;
-    }
+  const generateRoast = useCallback(
+    async (username: string, variants = 1, language = "en") => {
+      if (!username?.trim()) {
+        setError("Username is required");
+        return;
+      }
 
-    setIsLoading(true);
-    setError(null);
-    setRoastData(null);
+      setIsLoading(true);
+      setError(null);
+      setRoastData(null);
 
-    try {
-      const data = await RoastRepoAPI.generateRoast(username, { variants });
-      setRoastData(data);
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to generate roast";
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+      try {
+        const data = await RoastRepoAPI.generateRoast(username, {
+          variants,
+          language,
+        });
+        setRoastData(data);
+      } catch (err) {
+        const errorMessage =
+          err instanceof Error ? err.message : "Failed to generate roast";
+        setError(errorMessage);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    []
+  );
 
   const generateQuickRoast = useCallback(async (username: string) => {
     if (!username?.trim()) {
@@ -193,7 +199,7 @@ export function useRoastFlow() {
   const userValidation = useUserValidation();
 
   const roastUser = useCallback(
-    async (username: string, variants = 1) => {
+    async (username: string, variants = 1, language = "en") => {
       // First validate the user exists
       const isValid = await userValidation.validateUser(username);
       if (!isValid) {
@@ -202,7 +208,7 @@ export function useRoastFlow() {
       }
 
       // Generate the roast
-      await roastGeneration.generateRoast(username, variants);
+      await roastGeneration.generateRoast(username, variants, language);
       return { success: !roastGeneration.error, error: roastGeneration.error };
     },
     [userValidation, roastGeneration]

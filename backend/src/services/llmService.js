@@ -1,22 +1,35 @@
-const Groq = require("groq-sdk");
+const OpenAI = require("openai");
 
 class LLMService {
   constructor() {
-    if (!process.env.GROQ_API_KEY) {
+    if (!process.env.OPENROUTER_API_KEY) {
       console.warn(
-        "⚠️  GROQ_API_KEY not found. LLM features will be disabled."
+        "⚠️  OPENROUTER_API_KEY not found. LLM features will be disabled."
       );
       this.client = null;
     } else {
-      this.client = new Groq({
-        apiKey: process.env.GROQ_API_KEY,
+      this.client = new OpenAI({
+        baseURL: "https://openrouter.ai/api/v1",
+        apiKey: process.env.OPENROUTER_API_KEY,
       });
-      console.log("🤖 Groq LLM service initialized");
+      console.log("🤖 OpenRouter LLM service initialized with DeepSeek R1");
     }
   }
 
-  generateRoastPrompt(userData) {
+  generateRoastPrompt(userData, language = 'en') {
     const { profile, repositories, commits, events, languageStats } = userData;
+
+    // Language-specific instructions with strong emphasis
+    const languageInstructions = {
+      'en': 'IMPORTANT: Write the entire roast response in ENGLISH ONLY. Do not use any other language.',
+      'es': 'IMPORTANTE: Escribe toda la respuesta de roast SOLO EN ESPAÑOL. No uses ningún otro idioma. Genera el roast completamente en Español usando humor hispano y referencias culturales apropiadas.',
+      'fr': 'IMPORTANT: Écrivez toute la réponse de roast UNIQUEMENT EN FRANÇAIS. N\'utilisez aucune autre langue. Générez le roast entièrement en Français en utilisant l\'humour français et des références culturelles appropriées.',
+      'de': 'WICHTIG: Schreibe die gesamte Roast-Antwort NUR AUF DEUTSCH. Verwende keine andere Sprache. Erstelle den Roast vollständig auf Deutsch mit deutschem Humor und passenden kulturellen Referenzen.',
+      'hi': 'महत्वपूर्ण: पूरा रोस्ट केवल हिंदी में लिखें। कोई अन्य भाषा का उपयोग न करें। भारतीय हास्य और उपयुक्त सांस्कृतिक संदर्भों का उपयोग करके पूरी तरह से हिंदी में रोस्ट बनाएं।',
+      'zh': '重要提示：整个roast回复必须完全用中文书写。不要使用任何其他语言。使用中国式幽默和适当的文化参考完全用中文生成roast。',
+      'ja': '重要：ローストの回答全体を日本語のみで書いてください。他の言語は使用しないでください。日本のユーモアと適切な文化的参照を使用して完全に日本語でローストを生成してください。',
+      'ru': 'ВАЖНО: Напишите весь ответ роаста ТОЛЬКО НА РУССКОМ ЯЗЫКЕ. Не используйте никакого другого языка. Создайте роаст полностью на русском языке, используя русский юмор и подходящие культурные отсылки.'
+    };
 
     // Analyze the data to create context for roasting
     const totalStars = repositories.reduce((sum, repo) => sum + repo.stars, 0);
@@ -34,11 +47,12 @@ class LLMService {
 
     const repoNames = repositories.map((repo) => repo.name);
     const emptyRepos = repositories.filter((repo) => repo.size === 0).length;
-    const forkedRepos = repositories.filter(
-      (repo) => repo.forks_count === 0
-    ).length;
 
-    return `You are a witty code roaster. Generate a humorous, satirical roast of this GitHub developer based on their profile and activity. Be creative but not mean-spirited. Focus on funny observations about their coding habits, project choices, and GitHub behavior.
+    return `🚨 LANGUAGE REQUIREMENT: ${languageInstructions[language] || languageInstructions['en']}
+
+You are a witty code roaster. Generate a humorous, satirical roast of this GitHub developer based on their profile and activity. Be creative but not mean-spirited. Focus on funny observations about their coding habits, project choices, and GitHub behavior.
+
+REMEMBER: Your entire response must be in the language specified above. Do not use English unless specifically requested.
 
 Developer Profile:
 - Username: ${profile.login}
@@ -73,11 +87,12 @@ Roasting Guidelines:
 7. Use coding jokes, memes, and developer culture references
 8. Aim for 3-5 witty paragraphs
 9. End with a backhanded compliment
+10. ${languageInstructions[language] || languageInstructions['en']}
 
 Generate a roast that would make other developers laugh while being relatable:`;
   }
 
-  async generateRoast(userData) {
+  async generateRoast(userData, language = 'en') {
     if (!this.client) {
       return {
         roast:
@@ -87,22 +102,39 @@ Generate a roast that would make other developers laugh while being relatable:`;
     }
 
     try {
-      const prompt = this.generateRoastPrompt(userData);
+      const prompt = this.generateRoastPrompt(userData, language);
 
       const completion = await this.client.chat.completions.create({
+        extra_headers: {
+          "HTTP-Referer": "https://roastrepo.com",
+          "X-Title": "RoastRepo",
+        },
         messages: [
           {
             role: "system",
-            content:
-              "You are a witty GitHub profile roaster. Generate humorous, creative roasts about developers based on their GitHub activity. Be funny but not cruel.",
+            content: `You are a witty GitHub profile roaster. Generate humorous, creative roasts about developers based on their GitHub activity. Be funny but not cruel. 
+
+CRITICAL LANGUAGE REQUIREMENT: You MUST respond in the exact language specified by the user. If they request Hindi, respond ONLY in Hindi. If they request Spanish, respond ONLY in Spanish. Never mix languages or default to English unless specifically requested. This is a strict requirement.
+
+Language codes:
+- 'en' = English only
+- 'es' = Spanish only (Español)
+- 'fr' = French only (Français)
+- 'de' = German only (Deutsch)
+- 'hi' = Hindi only (हिंदी)
+- 'zh' = Chinese only (中文)
+- 'ja' = Japanese only (日本語)
+- 'ru' = Russian only (Русский)
+
+The user has requested language: ${language}. You MUST respond in this language only.`,
           },
           {
             role: "user",
             content: prompt,
           },
         ],
-        model: "llama3-8b-8192", // Fast Groq model
-        temperature: 0.9, // High creativity
+        model: "tngtech/deepseek-r1t2-chimera:free",
+        temperature: 0.9,
         max_tokens: 1000,
         top_p: 0.9,
       });
@@ -116,7 +148,8 @@ Generate a roast that would make other developers laugh while being relatable:`;
       return {
         roast: roast.trim(),
         fallback: false,
-        model: "llama3-8b-8192",
+        model: "tngtech/deepseek-r1t2-chimera:free",
+        language: language,
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
@@ -124,30 +157,99 @@ Generate a roast that would make other developers laugh while being relatable:`;
 
       // Fallback roasts based on data analysis
       return {
-        roast: this.generateFallbackRoast(userData),
+        roast: this.generateFallbackRoast(userData, language),
         fallback: true,
+        language: language,
         error: error.message,
       };
     }
   }
 
-  generateFallbackRoast(userData) {
+  generateFallbackRoast(userData, language = 'en') {
     const { profile, repositories, commits } = userData;
     const totalStars = repositories.reduce((sum, repo) => sum + repo.stars, 0);
 
+    // Language-specific fallback roasts
+    const fallbackTemplates = {
+      'en': {
+        greeting: `Hey ${profile.login}! `,
+        noStars: "I see you're collecting repositories like Pokémon cards, but with zero stars. Even your mom hasn't starred your repos yet! ",
+        fewStars: `${totalStars} stars total? That's cute. I've seen more stars in a cloudy night sky. `,
+        manyRepos: "You've got more repos than a Git hoarder's garage sale. Quality over quantity, friend! ",
+        genericCommits: "Your commit messages are more generic than a grocery store brand cereal. 'fix', 'update', 'change' - Shakespeare would be proud! ",
+        ending: "But hey, at least you're coding, which is more than most people can say! Keep pushing those commits! 🚀"
+      },
+      'es': {
+        greeting: `¡Hola ${profile.login}! `,
+        noStars: "Veo que coleccionas repositorios como cartas de Pokémon, pero con cero estrellas. ¡Ni tu mamá ha marcado tus repos como favoritos! ",
+        fewStars: `¿${totalStars} estrellas en total? Qué tierno. He visto más estrellas en una noche nublada. `,
+        manyRepos: "Tienes más repos que una venta de garage de un acumulador de Git. ¡Calidad sobre cantidad, amigo! ",
+        genericCommits: "Tus mensajes de commit son más genéricos que cereal de marca blanca. 'fix', 'update', 'change' - ¡Shakespeare estaría orgulloso! ",
+        ending: "Pero hey, al menos estás programando, ¡que es más de lo que la mayoría puede decir! ¡Sigue empujando esos commits! 🚀"
+      },
+      'fr': {
+        greeting: `Salut ${profile.login} ! `,
+        noStars: "Je vois que tu collectionnes les dépôts comme des cartes Pokémon, mais avec zéro étoile. Même ta maman n'a pas mis d'étoile à tes repos ! ",
+        fewStars: `${totalStars} étoiles au total ? C'est mignon. J'ai vu plus d'étoiles dans un ciel nuageux. `,
+        manyRepos: "Tu as plus de dépôts qu'un vide-grenier de collectionneur Git. Qualité plutôt que quantité, mon ami ! ",
+        genericCommits: "Tes messages de commit sont plus génériques qu'une marque de distributeur. 'fix', 'update', 'change' - Shakespeare serait fier ! ",
+        ending: "Mais bon, au moins tu codes, ce qui est plus que ce que la plupart des gens peuvent dire ! Continue à pousser ces commits ! 🚀"
+      },
+      'de': {
+        greeting: `Hey ${profile.login}! `,
+        noStars: "Ich sehe, du sammelst Repositories wie Pokémon-Karten, aber mit null Sternen. Selbst deine Mama hat deine Repos noch nicht gestarrt! ",
+        fewStars: `${totalStars} Sterne insgesamt? Wie süß. Ich habe mehr Sterne in einer bewölkten Nacht gesehen. `,
+        manyRepos: "Du hast mehr Repos als ein Git-Sammler-Flohmarkt. Qualität vor Quantität, Freund! ",
+        genericCommits: "Deine Commit-Nachrichten sind generischer als No-Name-Müsli. 'fix', 'update', 'change' - Shakespeare wäre stolz! ",
+        ending: "Aber hey, wenigstens programmierst du, das ist mehr als die meisten von sich behaupten können! Mach weiter mit den Commits! 🚀"
+      },
+      'hi': {
+        greeting: `हैलो ${profile.login}! `,
+        noStars: "मैं देख रहा हूं कि आप पोकेमॉन कार्ड की तरह रिपॉजिटरी इकट्ठा कर रहे हैं, लेकिन शून्य स्टार्स के साथ। आपकी मां ने भी अभी तक आपके रेपो को स्टार नहीं किया है! ",
+        fewStars: `कुल ${totalStars} स्टार्स? कितना प्यारा। मैंने बादल भरी रात में इससे ज्यादा तारे देखे हैं। `,
+        manyRepos: "आपके पास Git संग्राहक के गैराज सेल से ज्यादा रेपो हैं। गुणवत्ता मात्रा से ऊपर, दोस्त! ",
+        genericCommits: "आपके कमिट संदेश किराने की दुकान के ब्रांड अनाज से भी ज्यादा सामान्य हैं। 'fix', 'update', 'change' - शेक्सपियर गर्व महसूस करते! ",
+        ending: "लेकिन अरे हां, कम से कम आप कोडिंग तो कर रहे हैं, जो ज्यादातर लोग नहीं कह सकते! कमिट्स पुश करते रहिए! 🚀"
+      },
+      'zh': {
+        greeting: `你好 ${profile.login}! `,
+        noStars: "我看到你像收集宝可梦卡片一样收集仓库，但是零星星。连你妈妈都还没有给你的仓库点星！ ",
+        fewStars: `总共${totalStars}颗星？真可爱。我在阴天的夜晚都见过更多的星星。 `,
+        manyRepos: "你的仓库比Git囤积者的车库销售还多。质量胜过数量，朋友！ ",
+        genericCommits: "你的提交信息比杂货店品牌麦片还要通用。'fix', 'update', 'change' - 莎士比亚会感到骄傲！ ",
+        ending: "但是嘿，至少你在编程，这比大多数人能说的都多！继续推送那些提交！🚀"
+      },
+      'ja': {
+        greeting: `こんにちは ${profile.login}! `,
+        noStars: "ポケモンカードのようにリポジトリを集めているけど、星はゼロですね。お母さんでさえまだあなたのリポジトリにスターを付けていません！ ",
+        fewStars: `合計${totalStars}個の星？かわいいですね。曇った夜空でもっと多くの星を見たことがあります。 `,
+        manyRepos: "Gitコレクターのガレージセールよりも多くのリポジトリを持っていますね。量より質ですよ、友達！ ",
+        genericCommits: "あなたのコミットメッセージは安売りブランドのシリアルより汎用的です。'fix', 'update', 'change' - シェイクスピアが誇りに思うでしょう！ ",
+        ending: "でもまあ、少なくともコーディングをしているのは、ほとんどの人が言えることではありません！そのコミットを押し続けてください！🚀"
+      },
+      'ru': {
+        greeting: `Привет ${profile.login}! `,
+        noStars: "Вижу, что ты коллекционируешь репозитории как карточки покемонов, но с нулевыми звездами. Даже твоя мама еще не поставила звездочку твоим репо! ",
+        fewStars: `${totalStars} звезд всего? Мило. Я видел больше звезд в облачную ночь. `,
+        manyRepos: "У тебя больше репо, чем на гаражной распродаже Git-накопителя. Качество важнее количества, друг! ",
+        genericCommits: "Твои сообщения коммитов более общие, чем хлопья магазинного бренда. 'fix', 'update', 'change' - Шекспир бы гордился! ",
+        ending: "Но эй, по крайней мере, ты кодишь, что не каждый может сказать! Продолжай пушить эти коммиты! 🚀"
+      }
+    };
+
+    const template = fallbackTemplates[language] || fallbackTemplates['en'];
+    
     // Generate a simple roast based on patterns
-    let roast = `Hey ${profile.login}! `;
+    let roast = template.greeting;
 
     if (totalStars === 0) {
-      roast +=
-        "I see you're collecting repositories like Pokémon cards, but with zero stars. Even your mom hasn't starred your repos yet! ";
+      roast += template.noStars;
     } else if (totalStars < 10) {
-      roast += `${totalStars} stars total? That's cute. I've seen more stars in a cloudy night sky. `;
+      roast += template.fewStars;
     }
 
     if (repositories.length > 50) {
-      roast +=
-        "You've got more repos than a Git hoarder's garage sale. Quality over quantity, friend! ";
+      roast += template.manyRepos;
     }
 
     const recentCommits = commits.flatMap((repoCommit) =>
@@ -158,22 +260,20 @@ Generate a roast that would make other developers laugh while being relatable:`;
     ).length;
 
     if (genericCommits > 3) {
-      roast +=
-        "Your commit messages are more generic than a grocery store brand cereal. 'fix', 'update', 'change' - Shakespeare would be proud! ";
+      roast += template.genericCommits;
     }
 
-    roast +=
-      "But hey, at least you're coding, which is more than most people can say! Keep pushing those commits! 🚀";
+    roast += template.ending;
 
     return roast;
   }
 
-  async generateMultipleRoasts(userData, count = 3) {
+  async generateMultipleRoasts(userData, count = 3, language = 'en') {
     const roasts = [];
 
     for (let i = 0; i < count; i++) {
       try {
-        const roast = await this.generateRoast(userData);
+        const roast = await this.generateRoast(userData, language);
         roasts.push({
           ...roast,
           variant: i + 1,

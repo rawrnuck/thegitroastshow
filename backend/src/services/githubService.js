@@ -114,38 +114,84 @@ class GitHubService {
   async gatherUserData(username) {
     try {
       console.log(`🔍 Gathering data for user: ${username}`);
+      console.log(`${"=".repeat(60)}`);
 
       // Get basic profile
+      console.log(`📱 Fetching profile for: ${username}`);
       const profile = await this.getUserProfile(username);
+      console.log(`✅ Profile fetched:`, {
+        login: profile.login,
+        name: profile.name || "No name",
+        bio: profile.bio || "No bio",
+        location: profile.location || "No location",
+        company: profile.company || "No company",
+        public_repos: profile.public_repos,
+        followers: profile.followers,
+        following: profile.following,
+        created_at: profile.created_at,
+        updated_at: profile.updated_at,
+      });
 
       // Get repositories
+      console.log(`📁 Fetching repositories for: ${username}`);
       const repos = await this.getUserRepos(username, "updated", 20);
+      console.log(`✅ Found ${repos.length} repositories`);
+      repos.slice(0, 5).forEach((repo, index) => {
+        console.log(
+          `   ${index + 1}. ${repo.name} - ⭐${repo.stargazers_count} - ${
+            repo.language || "No language"
+          }`
+        );
+      });
 
       // Get recent commits from top repositories
+      console.log(`💻 Fetching commits from top repositories...`);
       const repoCommits = [];
       const topRepos = repos.slice(0, 5); // Analyze top 5 repos
 
       for (const repo of topRepos) {
         try {
+          console.log(`   📝 Getting commits from: ${repo.name}`);
           const commits = await this.getRepoCommits(username, repo.name, 10);
+          const processedCommits = commits.map((commit) => ({
+            message: commit.commit.message,
+            date: commit.commit.author.date,
+            additions: commit.stats?.additions || 0,
+            deletions: commit.stats?.deletions || 0,
+          }));
+
           repoCommits.push({
             repo: repo.name,
-            commits: commits.map((commit) => ({
-              message: commit.commit.message,
-              date: commit.commit.author.date,
-              additions: commit.stats?.additions || 0,
-              deletions: commit.stats?.deletions || 0,
-            })),
+            commits: processedCommits,
+          });
+
+          console.log(`   ✅ Found ${commits.length} commits in ${repo.name}`);
+          commits.slice(0, 3).forEach((commit, index) => {
+            console.log(
+              `      ${index + 1}. "${commit.commit.message
+                .split("\n")[0]
+                .substring(0, 50)}..."`
+            );
           });
         } catch (error) {
-          console.log(`⚠️  Could not fetch commits for ${repo.name}`);
+          console.log(
+            `   ⚠️  Could not fetch commits for ${repo.name}: ${error.message}`
+          );
         }
       }
 
       // Get recent public events
+      console.log(`🎯 Fetching recent events for: ${username}`);
       const events = await this.getUserEvents(username, 20);
+      console.log(`✅ Found ${events.length} recent events`);
+      const eventTypes = events.reduce((acc, event) => {
+        acc[event.type] = (acc[event.type] || 0) + 1;
+        return acc;
+      }, {});
+      console.log(`   Event breakdown:`, eventTypes);
 
       // Analyze languages across repositories
+      console.log(`🔤 Analyzing programming languages...`);
       const languageStats = {};
       for (const repo of topRepos.slice(0, 10)) {
         try {
@@ -154,9 +200,31 @@ class GitHubService {
             languageStats[lang] = (languageStats[lang] || 0) + bytes;
           });
         } catch (error) {
-          console.log(`⚠️  Could not fetch languages for ${repo.name}`);
+          console.log(`   ⚠️  Could not fetch languages for ${repo.name}`);
         }
       }
+
+      const sortedLanguages = Object.entries(languageStats)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5);
+      console.log(
+        `✅ Top languages:`,
+        sortedLanguages
+          .map(([lang, bytes]) => `${lang}: ${(bytes / 1024).toFixed(1)}KB`)
+          .join(", ")
+      );
+
+      console.log(`${"=".repeat(60)}`);
+      console.log(`🎯 Data gathering complete for ${username}!`);
+      console.log(
+        `   📊 Stats: ${repos.length} repos, ${repoCommits.reduce(
+          (sum, rc) => sum + rc.commits.length,
+          0
+        )} commits, ${events.length} events, ${
+          Object.keys(languageStats).length
+        } languages`
+      );
+      console.log(`${"=".repeat(60)}`);
 
       return {
         profile: {

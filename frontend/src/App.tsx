@@ -46,10 +46,15 @@ function App() {
   }, []);
 
   // Handle username submission - now uses real API
-  const handleUsernameSubmit = async (submittedUsername: string) => {
+  const handleUsernameSubmit = async (
+    submittedUsername: string,
+    language: string = "en"
+  ) => {
     console.log(
       "🔄 Starting roast generation for username:",
-      submittedUsername
+      submittedUsername,
+      "in language:",
+      language
     );
     console.log(
       "🌐 API Base URL:",
@@ -62,8 +67,8 @@ function App() {
 
     try {
       console.log("📡 Calling generateRoast function...");
-      // Generate roast using the real backend
-      await generateRoast(submittedUsername, 1);
+      // Generate roast using the real backend with language support
+      await generateRoast(submittedUsername, 1, language);
       console.log("✅ generateRoast completed successfully");
     } catch (err) {
       console.error("❌ Failed to generate roast:", err);

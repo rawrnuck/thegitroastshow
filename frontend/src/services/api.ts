@@ -118,6 +118,7 @@ export class RoastRepoAPI {
     username: string,
     options: {
       variants?: number;
+      language?: string;
     } = {}
   ): Promise<RoastResponse> {
     if (!username?.trim()) {
@@ -128,6 +129,9 @@ export class RoastRepoAPI {
     if (options.variants && options.variants > 1) {
       params.append("variants", Math.min(options.variants, 3).toString());
     }
+    if (options.language) {
+      params.append("language", options.language);
+    }
 
     const query = params.toString() ? `?${params.toString()}` : "";
     return apiRequest<RoastResponse>(
@@ -135,9 +139,7 @@ export class RoastRepoAPI {
     );
   }
 
-  static async generateQuickRoast(
-    username: string
-  ): Promise<{
+  static async generateQuickRoast(username: string): Promise<{
     success: boolean;
     username: string;
     roast: string;
@@ -165,9 +167,16 @@ export class RoastRepoAPI {
 // Helper functions for common use cases
 export const roastAPI = {
   // Simple wrapper for getting a roast
-  async roastUser(username: string, variants = 1): Promise<string[]> {
+  async roastUser(
+    username: string,
+    variants = 1,
+    language = "en"
+  ): Promise<string[]> {
     try {
-      const response = await RoastRepoAPI.generateRoast(username, { variants });
+      const response = await RoastRepoAPI.generateRoast(username, {
+        variants,
+        language,
+      });
 
       if (response.roasts) {
         return response.roasts.map((r) => r.roast);

@@ -28,22 +28,34 @@ const validateUsername = (req, res, next) => {
 router.get("/:username", validateUsername, async (req, res) => {
   try {
     const { username } = req.params;
-    const { variants = 1 } = req.query;
+    const { variants = 1, language = "en" } = req.query;
 
-    console.log(`🔥 Generating roast for: ${username}`);
+    console.log(
+      `🔥 Generating roast for: ${username} in language: ${language}`
+    );
+
+    // Validate language parameter
+    const supportedLanguages = ["en", "es", "fr", "de", "hi", "zh", "ja", "ru"];
+    const targetLanguage = supportedLanguages.includes(language)
+      ? language
+      : "en";
 
     // Gather GitHub data
     const userData = await githubService.gatherUserData(username);
 
-    // Generate roast(s)
+    // Generate roast(s) with language support
     let roasts;
     const variantCount = Math.min(Math.max(parseInt(variants) || 1, 1), 3); // 1-3 variants
 
     if (variantCount === 1) {
-      const roast = await llmService.generateRoast(userData);
+      const roast = await llmService.generateRoast(userData, targetLanguage);
       roasts = [roast];
     } else {
-      roasts = await llmService.generateMultipleRoasts(userData, variantCount);
+      roasts = await llmService.generateMultipleRoasts(
+        userData,
+        variantCount,
+        targetLanguage
+      );
     }
 
     // Calculate some fun stats
@@ -72,6 +84,7 @@ router.get("/:username", validateUsername, async (req, res) => {
     res.json({
       success: true,
       username,
+      language: targetLanguage,
       roasts: roasts.filter((r) => r), // Filter out any failed attempts
       stats,
       profile: {

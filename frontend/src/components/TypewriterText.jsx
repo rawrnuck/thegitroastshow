@@ -1,5 +1,49 @@
 import React, { useState, useEffect } from "react";
 
+// Predefined sound effects mapping
+const SOUND_EFFECTS = {
+  crowd_laugh: {
+    file: "crowd_laugh.mp3",
+    emoji: "😂",
+    keywords: ["laugh", "laughs", "laughter", "chuckle", "giggle"],
+  },
+  crowd_gasp: {
+    file: "crowd_gasp.mp3",
+    emoji: "😱",
+    keywords: ["gasp", "gasps", "shock", "surprised"],
+  },
+  applause: {
+    file: "applause.mp3",
+    emoji: "👏",
+    keywords: ["applause", "clap", "claps", "cheer", "whoop", "whoops"],
+  },
+  crickets: {
+    file: "crickets.mp3",
+    emoji: "🦗",
+    keywords: ["cricket", "crickets", "silence", "awkward"],
+  },
+  boo: {
+    file: "boo.mp3",
+    emoji: "👎",
+    keywords: ["boo", "boos", "hiss", "disapproval"],
+  },
+  rimshot: {
+    file: "rimshot.mp3",
+    emoji: "🥁",
+    keywords: ["rimshot", "drum", "ba dum tss", "joke"],
+  },
+  mic_drop: {
+    file: "mic_drop.mp3",
+    emoji: "🎤",
+    keywords: ["mic drop", "drops mic", "mic", "microphone"],
+  },
+  air_horn: {
+    file: "air_horn.mp3",
+    emoji: "📯",
+    keywords: ["air horn", "horn", "dramatic", "epic"],
+  },
+};
+
 // Parser function to convert LLM text into structured script
 function parseRoast(rawText) {
   if (!rawText) return [];
@@ -14,26 +58,53 @@ function parseRoast(rawText) {
     // If it's a stage direction, map it to a sound effect
     if (part.startsWith("*") && part.endsWith("*")) {
       const direction = part.slice(1, -1).toLowerCase();
-      let effect = "default";
+      let effect = "crickets"; // Default fallback sound
 
-      if (direction.includes("laugh")) effect = "crowd_laugh";
-      else if (direction.includes("gasp")) effect = "crowd_gasp";
-      else if (direction.includes("applause") || direction.includes("whoop"))
-        effect = "applause";
-      else if (direction.includes("mic")) effect = "mic_tap";
-      else if (direction.includes("cricket")) effect = "crickets";
-      else if (direction.includes("rimshot")) effect = "rimshot";
-      else if (direction.includes("boo")) effect = "boo";
+      // Find matching sound effect based on keywords
+      for (const [soundKey, soundData] of Object.entries(SOUND_EFFECTS)) {
+        if (soundData.keywords.some((keyword) => direction.includes(keyword))) {
+          effect = soundKey;
+          break;
+        }
+      }
 
-      return { type: "sound", effect, cue: part };
+      return {
+        type: "sound",
+        effect,
+        cue: part,
+        emoji: SOUND_EFFECTS[effect].emoji,
+        file: SOUND_EFFECTS[effect].file,
+      };
     }
     // Otherwise, it's speech
     return { type: "speech", text: part.trim() };
   });
 
   console.log("✅ Roast Script Parsed:", JSON.stringify(script, null, 2));
+  console.log(
+    "🎵 Sound Effects Used:",
+    script
+      .filter((item) => item.type === "sound")
+      .map((item) => `${item.effect} (${item.file})`)
+  );
   return script;
 }
+
+// Function to play sound effects
+const playSound = (soundEffect) => {
+  try {
+    const audio = new Audio(`/sounds/${soundEffect.file}`);
+    audio.volume = 0.5; // Adjust volume as needed
+    audio.play().catch((error) => {
+      console.log(
+        `🔇 Could not play sound: ${soundEffect.file}`,
+        error.message
+      );
+    });
+  } catch (error) {
+    console.log(`🔇 Sound file not found: ${soundEffect.file}`);
+  }
+};
 
 const TypewriterText = ({
   text,
@@ -106,6 +177,9 @@ const TypewriterText = ({
       // Show sound cue
       setSoundCue(currentItem.cue);
 
+      // Play the actual sound
+      playSound(currentItem);
+
       // Wait for sound duration then move to next item
       const soundTimer = setTimeout(() => {
         setCurrentScriptIndex((prev) => prev + 1);
@@ -134,6 +208,11 @@ const TypewriterText = ({
     setSoundCue(null);
   };
 
+  // Calculate total characters from all speech items
+  const totalCharacters = script
+    .filter((item) => item.type === "speech")
+    .reduce((total, item) => total + item.text.length, 0);
+
   // Format text with proper line breaks and styling
   const formatText = (text) => {
     return text.split("\n").map((line, index) => (
@@ -150,7 +229,10 @@ const TypewriterText = ({
         {soundCue && (
           <div className="mb-4 p-3 bg-primary-teal bg-opacity-20 rounded-lg border border-primary-teal border-opacity-50">
             <div className="text-primary-teal font-bold text-lg">
-              🔊 {soundCue}
+              {script[currentScriptIndex]?.emoji || "🔊"} {soundCue}
+            </div>
+            <div className="text-xs text-primary-teal opacity-75 mt-1">
+              Playing: {script[currentScriptIndex]?.file || "sound.mp3"}
             </div>
           </div>
         )}
@@ -190,7 +272,9 @@ const TypewriterText = ({
       <div className="mt-8 pt-4 border-t border-primary-teal border-opacity-20">
         <div className="text-xs font-mono text-primary-dark space-y-1">
           <div className="flex justify-between">
-            <span>Characters: {displayedText.length}</span>
+            <span>
+              Characters: {displayedText.length}/{totalCharacters}
+            </span>
             <span>Status: {isComplete ? "COMPLETE" : "TYPING"}</span>
           </div>
           <div className="text-accent-cyan">

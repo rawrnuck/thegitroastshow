@@ -48,7 +48,9 @@ class LLMService {
     const repoNames = repositories.map((repo) => repo.name);
     const emptyRepos = repositories.filter((repo) => repo.size === 0).length;
 
-  return `🚨 LANGUAGE REQUIREMENT: ${languageInstructions[language] || languageInstructions['en']}
+    return `🚨 LANGUAGE REQUIREMENT: ${
+      languageInstructions[language] || languageInstructions["en"]
+    }
 
 You are not just a code roaster—you are the host of a live roast show. 
 Your job is to generate a roast script as a sequence of JSON chunks, alternating between "speech" and "sound". 
@@ -90,7 +92,9 @@ Repository Analysis:
 - Total repositories: ${totalRepos}
 - Total stars: ${totalStars}
 - Empty repositories: ${emptyRepos}
-- Top programming languages: ${topLanguages.join(", ") || "None (seriously, not even HTML?)"}
+- Top programming languages: ${
+      topLanguages.join(", ") || "None (seriously, not even HTML?)"
+    }
 - Repository names: ${repoNames.slice(0, 10).join(", ")}
 
 Recent Commit Messages:

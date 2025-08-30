@@ -208,10 +208,15 @@ const TypewriterText = ({
     setSoundCue(null);
   };
 
-  // Calculate total characters from all speech items
+  // Calculate total characters from all speech items + spacing
   const totalCharacters = script
     .filter((item) => item.type === "speech")
-    .reduce((total, item) => total + item.text.length, 0);
+    .reduce((total, item, index) => {
+      // Add text length plus 2 characters for "\n\n" spacing (except for last item)
+      const speechItems = script.filter((s) => s.type === "speech");
+      const isLastSpeech = index === speechItems.length - 1;
+      return total + item.text.length + (isLastSpeech ? 0 : 2);
+    }, 0);
 
   // Format text with proper line breaks and styling
   const formatText = (text) => {

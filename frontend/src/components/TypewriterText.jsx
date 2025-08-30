@@ -1,46 +1,51 @@
 import React, { useState, useEffect } from "react";
 
-// Predefined sound effects mapping
+// Predefined sound effects mapping - Updated to use sounds directory
 const SOUND_EFFECTS = {
   crowd_laugh: {
-    file: "crowd_laugh.mp3",
+    file: "sounds/applause.mp3",
     emoji: "😂",
     keywords: ["laugh", "laughs", "laughter", "chuckle", "giggle"],
   },
   crowd_gasp: {
-    file: "crowd_gasp.mp3",
+    file: "sounds/crowdgasp.mp3",
     emoji: "😱",
     keywords: ["gasp", "gasps", "shock", "surprised"],
   },
   applause: {
-    file: "applause.mp3",
+    file: "sounds/applause.mp3",
     emoji: "👏",
     keywords: ["applause", "clap", "claps", "cheer", "whoop", "whoops"],
   },
   crickets: {
-    file: "crickets.mp3",
+    file: "sounds/crickets.mp3",
     emoji: "🦗",
     keywords: ["cricket", "crickets", "silence", "awkward"],
   },
   boo: {
-    file: "boo.mp3",
+    file: "sounds/crowdboos.mp3",
     emoji: "👎",
     keywords: ["boo", "boos", "hiss", "disapproval"],
   },
   rimshot: {
-    file: "rimshot.mp3",
+    file: "sounds/rimshot.mp3",
     emoji: "🥁",
     keywords: ["rimshot", "drum", "ba dum tss", "joke"],
   },
   mic_drop: {
-    file: "mic_drop.mp3",
+    file: "sounds/micdrop.mp3",
     emoji: "🎤",
     keywords: ["mic drop", "drops mic", "mic", "microphone"],
   },
   air_horn: {
-    file: "air_horn.mp3",
+    file: "sounds/airhorn.mp3",
     emoji: "📯",
     keywords: ["air horn", "horn", "dramatic", "epic"],
+  },
+  mic_moving: {
+    file: "sounds/micmoving.mp3",
+    emoji: "🎤",
+    keywords: ["adjusts mic", "mic feedback", "taps mic", "testing"],
   },
 };
 
@@ -50,35 +55,69 @@ function parseRoast(rawText) {
 
   console.log("🔍 Raw LLM Response:", rawText);
 
-  // Regex to find and split by *stage directions*
-  const regex = /(\*.*?\*)/g;
+  // More precise regex to match only proper stage directions
+  // Looks for asterisks with descriptive text (not just single words or fragments)
+  const regex =
+    /(\*(?:crowd\s+\w+|applause|crickets|rimshot|air\s+horn|drops?\s+mic|mic\s+drop|adjusts?\s+mic|crowd\s+(?:laughs?|gasps?|boos?))\*)/gi;
   const parts = rawText.split(regex).filter((p) => p.trim());
 
-  const script = parts.map((part) => {
-    // If it's a stage direction, map it to a sound effect
-    if (part.startsWith("*") && part.endsWith("*")) {
-      const direction = part.slice(1, -1).toLowerCase();
-      let effect = "crickets"; // Default fallback sound
+  const script = parts
+    .map((part) => {
+      // If it's a stage direction, map it to a sound effect
+      if (part.startsWith("*") && part.endsWith("*") && part.length > 4) {
+        const direction = part.slice(1, -1).toLowerCase().trim();
 
-      // Find matching sound effect based on keywords
-      for (const [soundKey, soundData] of Object.entries(SOUND_EFFECTS)) {
-        if (soundData.keywords.some((keyword) => direction.includes(keyword))) {
-          effect = soundKey;
-          break;
+        let effect = "crickets"; // Default fallback sound
+
+        // Find matching sound effect based on keywords
+        for (const [soundKey, soundData] of Object.entries(SOUND_EFFECTS)) {
+          if (
+            soundData.keywords.some((keyword) => direction.includes(keyword))
+          ) {
+            effect = soundKey;
+            break;
+          }
         }
-      }
 
-      return {
+        return {
+          type: "sound",
+          effect,
+          cue: part,
+          emoji: SOUND_EFFECTS[effect].emoji,
+          file: SOUND_EFFECTS[effect].file,
+        };
+      }
+      // Otherwise, it's speech
+      return { type: "speech", text: part.trim() };
+    })
+    .filter((item) => item && item.text !== "" && item.text !== "*"); // Remove empty items and lone asterisks
+
+  // If we have too few valid speech items, treat the whole thing as one speech block
+  const speechItems = script.filter(
+    (item) => item.type === "speech" && item.text.length > 10
+  );
+  if (speechItems.length < 3) {
+    console.log(
+      "⚠️ Parsing produced fragmented results, using full text as speech"
+    );
+    return [
+      {
         type: "sound",
-        effect,
-        cue: part,
-        emoji: SOUND_EFFECTS[effect].emoji,
-        file: SOUND_EFFECTS[effect].file,
-      };
-    }
-    // Otherwise, it's speech
-    return { type: "speech", text: part.trim() };
-  });
+        effect: "mic_moving",
+        cue: "*adjusts mic*",
+        emoji: "🎤",
+        file: "sounds/micmoving.mp3",
+      },
+      { type: "speech", text: rawText.replace(/\*/g, "") }, // Remove all asterisks
+      {
+        type: "sound",
+        effect: "mic_drop",
+        cue: "*drops mic*",
+        emoji: "🎤",
+        file: "sounds/micdrop.mp3",
+      },
+    ];
+  }
 
   console.log("✅ Roast Script Parsed:", JSON.stringify(script, null, 2));
   console.log(
@@ -88,13 +127,30 @@ function parseRoast(rawText) {
       .map((item) => `${item.effect} (${item.file})`)
   );
   return script;
-}
-
-// Function to play sound effects
+} // Function to play sound effects
 const playSound = (soundEffect) => {
   try {
-    const audio = new Audio(`/sounds/${soundEffect.file}`);
+    console.log(
+      `🎵 Attempting to play: /sounds/${soundEffect.file.replace(
+        "sounds/",
+        ""
+      )}`
+    );
+    const audio = new Audio(`/${soundEffect.file}`);
     audio.volume = 0.5; // Adjust volume as needed
+
+    audio.addEventListener("loadstart", () => {
+      console.log(`📥 Loading sound: ${soundEffect.file}`);
+    });
+
+    audio.addEventListener("canplay", () => {
+      console.log(`✅ Sound ready to play: ${soundEffect.file}`);
+    });
+
+    audio.addEventListener("error", (e) => {
+      console.error(`❌ Error loading sound: ${soundEffect.file}`, e);
+    });
+
     audio.play().catch((error) => {
       console.log(
         `🔇 Could not play sound: ${soundEffect.file}`,

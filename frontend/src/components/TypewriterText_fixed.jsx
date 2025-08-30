@@ -55,213 +55,153 @@ function parseRoast(rawText) {
 
   console.log("🔍 Raw LLM Response:", rawText);
 
-  // Look ONLY for specific sound effect patterns - exact matches for stage directions
-  const soundEffectPatterns = [
-    /\*adjusts? mic\*|\*taps? mic\*|\*mic feedback\*|\*testing\*/gi,
-    /\*crowd laughs?\*|\*audience laughs?\*|\*laughter\*/gi,
-    /\*crowd gasps?\*|\*audience gasps?\*|\*gasp\*/gi,
-    /\*applause\*|\*claps?\*|\*cheers?\*/gi,
-    /\*crickets?\*|\*silence\*|\*awkward\*/gi,
-    /\*crowd boos?\*|\*audience boos?\*|\*boo\*/gi,
-    /\*rimshot\*|\*drum\*|\*ba dum tss\*/gi,
-    /\*drops? mic\*|\*mic drop\*/gi,
-    /\*air horn\*|\*horn\*/gi,
+  // More selective approach - only look for specific stage direction patterns
+  // Look for asterisks that contain action/sound words
+  const stageDirectionKeywords = [
+    "crowd",
+    "audience",
+    "applause",
+    "clap",
+    "cheer",
+    "laugh",
+    "boo",
+    "gasp",
+    "cricket",
+    "silence",
+    "awkward",
+    "rimshot",
+    "drum",
+    "ba dum",
+    "mic drop",
+    "drops mic",
+    "microphone",
+    "mic",
+    "horn",
+    "air horn",
+    "adjusts",
+    "taps",
+    "feedback",
+    "testing",
+    "sound",
   ];
 
   const script = [];
-  let currentPos = 0;
-  const foundEffects = [];
+  let currentText = rawText;
+  let processedText = "";
 
-  // Find all sound effects in the text
-  soundEffectPatterns.forEach((pattern) => {
-    let match;
-    while ((match = pattern.exec(rawText)) !== null) {
-      foundEffects.push({
-        match: match[0],
-        start: match.index,
-        end: match.index + match[0].length,
-        text: match[0].toLowerCase(),
-      });
-    }
-  });
+  // Find potential stage directions
+  const stageDirectionRegex = /\*([^*]*)\*/g;
+  let match;
+  let lastIndex = 0;
 
-  // Sort effects by position
-  foundEffects.sort((a, b) => a.start - b.start);
+  while ((match = stageDirectionRegex.exec(rawText)) !== null) {
+    const fullMatch = match[0];
+    const content = match[1].toLowerCase().trim();
 
-  console.log("🎭 Found sound effects:", foundEffects);
-
-  // If no sound effects found, use the original text as speech and add strategic sounds
-  if (foundEffects.length === 0) {
-    console.log(
-      "⚠️ No explicit sound effects found, using strategic injection"
+    // Check if this asterisk contains stage direction keywords
+    const isStageDirection = stageDirectionKeywords.some((keyword) =>
+      content.includes(keyword.toLowerCase())
     );
-    return createEnhancedScript(rawText);
-  }
 
-  // Process text with found sound effects
-  currentPos = 0;
-  foundEffects.forEach((effect, index) => {
-    // Add speech before this effect (clean formatting asterisks)
-    if (effect.start > currentPos) {
-      const speechText = rawText.slice(currentPos, effect.start).trim();
-      if (speechText) {
-        // Remove formatting asterisks but keep the text
-        const cleanedText = speechText
-          .replace(/\*\*(.+?)\*\*/g, "$1") // **bold** -> bold
-          .replace(/\*(.+?)\*/g, "$1") // *italic* -> italic
-          .trim();
-        if (cleanedText) {
-          script.push({ type: "speech", text: cleanedText });
+    if (isStageDirection) {
+      console.log(`🎭 Found stage direction: "${content}"`);
+
+      // Add speech before this stage direction
+      const speechBefore = rawText.slice(lastIndex, match.index).trim();
+      if (speechBefore) {
+        script.push({ type: "speech", text: speechBefore });
+      }
+
+      // Find matching sound effect
+      let effect = "crickets"; // Default
+      for (const [soundKey, soundData] of Object.entries(SOUND_EFFECTS)) {
+        if (
+          soundData.keywords.some((keyword) =>
+            content.includes(keyword.toLowerCase())
+          )
+        ) {
+          effect = soundKey;
+          console.log(`✅ Matched sound: ${effect} for "${content}"`);
+          break;
         }
       }
-    }
 
-    // Add the sound effect
-    let soundEffect = "crickets"; // Default
-    for (const [soundKey, soundData] of Object.entries(SOUND_EFFECTS)) {
-      if (soundData.keywords.some((keyword) => effect.text.includes(keyword))) {
-        soundEffect = soundKey;
-        console.log(`✅ Matched sound: ${soundEffect} for "${effect.match}"`);
-        break;
-      }
-    }
+      script.push({
+        type: "sound",
+        effect,
+        cue: fullMatch,
+        emoji: SOUND_EFFECTS[effect].emoji,
+        file: SOUND_EFFECTS[effect].file,
+      });
 
-    script.push({
-      type: "sound",
-      effect: soundEffect,
-      cue: effect.match,
-      emoji: SOUND_EFFECTS[soundEffect].emoji,
-      file: SOUND_EFFECTS[soundEffect].file,
-    });
-
-    currentPos = effect.end;
-  });
-
-  // Add remaining speech after last effect (clean formatting asterisks)
-  if (currentPos < rawText.length) {
-    const remainingSpeech = rawText.slice(currentPos).trim();
-    if (remainingSpeech) {
-      // Remove formatting asterisks but keep the text
-      const cleanedText = remainingSpeech
-        .replace(/\*\*(.+?)\*\*/g, "$1") // **bold** -> bold
-        .replace(/\*(.+?)\*/g, "$1") // *italic* -> italic
-        .trim();
-      if (cleanedText) {
-        script.push({ type: "speech", text: cleanedText });
-      }
+      lastIndex = match.index + fullMatch.length;
+    } else {
+      console.log(`⚠️ Skipping formatting asterisk: ${fullMatch}`);
     }
   }
 
-  console.log("🔍 Parsed Script:", script);
+  // Add remaining speech after last stage direction
+  const remainingSpeech = rawText.slice(lastIndex).trim();
+  if (remainingSpeech) {
+    script.push({ type: "speech", text: remainingSpeech });
+  }
+
+  console.log("🔍 Initial Script:", script);
+
+  // Check if we have reasonable parsing results
+  const validSpeechItems = script.filter(
+    (item) => item.type === "speech" && item.text.length > 10
+  );
+  const soundItems = script.filter((item) => item.type === "sound");
+
+  console.log(
+    `📊 Parse Results: ${validSpeechItems.length} speech items, ${soundItems.length} sound items`
+  );
+
+  // If we don't have enough content, create a simple fallback
+  if (script.length === 0) {
+    console.log("⚠️ No parsing results, using simple fallback");
+
+    // Clean the text and split into sentences
+    const cleanText = rawText.replace(/\*/g, "");
+    const sentences = cleanText
+      .split(/[.!?]+/)
+      .filter((s) => s.trim().length > 10);
+
+    const fallbackScript = [
+      {
+        type: "sound",
+        effect: "mic_moving",
+        cue: "*adjusts mic*",
+        emoji: "🎤",
+        file: "sounds/micmoving.mp3",
+      },
+    ];
+
+    sentences.forEach((sentence, index) => {
+      fallbackScript.push({
+        type: "speech",
+        text: sentence.trim(),
+      });
+
+      // Add occasional sounds
+      if (index === Math.floor(sentences.length / 3)) {
+        fallbackScript.push({
+          type: "sound",
+          effect: "crowd_laugh",
+          cue: "*crowd laughs*",
+          emoji: "😂",
+          file: "sounds/applause.mp3",
+        });
+      }
+    });
+
+    return fallbackScript;
+  }
+
   return script.filter(
     (item) => item && (item.text?.length > 0 || item.type === "sound")
   );
-}
-
-// Enhanced script creation for when no explicit sound effects are found
-function createEnhancedScript(rawText) {
-  // Clean the text of formatting asterisks first
-  const cleanText = rawText
-    .replace(/\*\*(.+?)\*\*/g, "$1") // **bold** -> bold
-    .replace(/\*(.+?)\*/g, "$1") // *italic* -> italic
-    .trim();
-
-  // Split into sentences
-  const sentences = cleanText
-    .split(/[.!?]+/)
-    .filter((s) => s.trim().length > 10);
-
-  const enhancedScript = [];
-
-  // Add intro sound
-  enhancedScript.push({
-    type: "sound",
-    effect: "mic_moving",
-    cue: "*adjusts mic*",
-    emoji: "🎤",
-    file: "sounds/micmoving.mp3",
-  });
-
-  sentences.forEach((sentence, index) => {
-    const trimmedSentence = sentence.trim();
-
-    // Add the cleaned sentence (no asterisks)
-    enhancedScript.push({
-      type: "speech",
-      text: trimmedSentence,
-    });
-
-    // Add strategic sounds based on content and position
-    const lowerSentence = trimmedSentence.toLowerCase();
-
-    // Content-based sound detection
-    if (
-      lowerSentence.includes("zero") ||
-      lowerSentence.includes("no ") ||
-      lowerSentence.includes("none") ||
-      lowerSentence.includes("empty")
-    ) {
-      enhancedScript.push({
-        type: "sound",
-        effect: "crickets",
-        cue: "*crickets*",
-        emoji: "🦗",
-        file: "sounds/crickets.mp3",
-      });
-    } else if (
-      lowerSentence.includes("wow") ||
-      lowerSentence.includes("amazing") ||
-      lowerSentence.includes("impressive") ||
-      lowerSentence.includes("bravo")
-    ) {
-      enhancedScript.push({
-        type: "sound",
-        effect: "crowd_gasp",
-        cue: "*crowd gasps*",
-        emoji: "😱",
-        file: "sounds/crowdgasp.mp3",
-      });
-    } else if (index === Math.floor(sentences.length / 4)) {
-      // First quarter - applause
-      enhancedScript.push({
-        type: "sound",
-        effect: "applause",
-        cue: "*applause*",
-        emoji: "👏",
-        file: "sounds/applause.mp3",
-      });
-    } else if (index === Math.floor(sentences.length / 2)) {
-      // Halfway - crowd laughs
-      enhancedScript.push({
-        type: "sound",
-        effect: "crowd_laugh",
-        cue: "*crowd laughs*",
-        emoji: "😂",
-        file: "sounds/applause.mp3",
-      });
-    } else if (index === Math.floor((3 * sentences.length) / 4)) {
-      // Three quarters - rimshot
-      enhancedScript.push({
-        type: "sound",
-        effect: "rimshot",
-        cue: "*rimshot*",
-        emoji: "🥁",
-        file: "sounds/rimshot.mp3",
-      });
-    }
-  });
-
-  // Add ending sound
-  enhancedScript.push({
-    type: "sound",
-    effect: "mic_drop",
-    cue: "*drops mic*",
-    emoji: "🎤",
-    file: "sounds/micdrop.mp3",
-  });
-
-  console.log("✅ Enhanced script created with cleaned text:", enhancedScript);
-  return enhancedScript;
 }
 
 const TypewriterText = ({

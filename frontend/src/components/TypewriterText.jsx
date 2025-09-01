@@ -266,7 +266,7 @@ function createEnhancedScript(rawText) {
 
 const TypewriterText = ({
   text,
-  speed = 50,
+  speed = 100, // Slower default speed (was 50)
   onComplete,
   canRestart = true,
 }) => {
@@ -277,6 +277,8 @@ const TypewriterText = ({
   const [isComplete, setIsComplete] = useState(false);
   const [showCursor, setShowCursor] = useState(true);
   const [soundCue, setSoundCue] = useState(null);
+  const [totalCharacters, setTotalCharacters] = useState(0);
+  const [currentCharacterCount, setCurrentCharacterCount] = useState(0);
 
   // Sound playing state
   const lastSoundTimeRef = useRef(0);
@@ -327,9 +329,17 @@ const TypewriterText = ({
     if (text) {
       const parsedScript = parseRoast(text);
       setScript(parsedScript);
+
+      // Calculate total characters in speech elements
+      const totalChars = parsedScript
+        .filter((item) => item.type === "speech")
+        .reduce((sum, item) => sum + (item.text?.length || 0), 0);
+
+      setTotalCharacters(totalChars);
       setCurrentScriptIndex(0);
       setDisplayedText("");
       setCurrentIndex(0);
+      setCurrentCharacterCount(0);
       setIsComplete(false);
       setSoundCue(null);
     }
@@ -357,6 +367,7 @@ const TypewriterText = ({
         const timeout = setTimeout(() => {
           setDisplayedText((prev) => prev + currentChar);
           setCurrentIndex((prev) => prev + 1);
+          setCurrentCharacterCount((prev) => prev + 1);
         }, speed);
 
         return () => clearTimeout(timeout);
@@ -394,13 +405,38 @@ const TypewriterText = ({
       setCurrentScriptIndex(0);
       setDisplayedText("");
       setCurrentIndex(0);
+      setCurrentCharacterCount(0);
       setIsComplete(false);
       setSoundCue(null);
     }
   };
 
+  // Calculate progress percentage
+  const progressPercentage =
+    totalCharacters > 0 ? (currentCharacterCount / totalCharacters) * 100 : 0;
+
   return (
     <div className="min-h-[200px] bg-gray-900 text-green-400 p-6 rounded-lg font-mono overflow-y-auto">
+      {/* Character Count Display */}
+      <div className="mb-4 flex justify-between items-center text-sm text-gray-400">
+        <div>
+          Characters:{" "}
+          <span className="text-green-400">{currentCharacterCount}</span> /{" "}
+          <span className="text-blue-400">{totalCharacters}</span>
+        </div>
+        <div className="text-yellow-400">
+          Progress: {progressPercentage.toFixed(1)}%
+        </div>
+      </div>
+
+      {/* Progress Bar */}
+      <div className="mb-4 w-full bg-gray-700 rounded-full h-2">
+        <div
+          className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-300"
+          style={{ width: `${progressPercentage}%` }}
+        ></div>
+      </div>
+
       <div className="whitespace-pre-wrap leading-relaxed">
         {displayedText}
         {!isComplete && (

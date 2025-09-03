@@ -279,10 +279,12 @@ const TypewriterText = ({
   const [soundCue, setSoundCue] = useState(null);
   const [totalCharacters, setTotalCharacters] = useState(0);
   const [currentCharacterCount, setCurrentCharacterCount] = useState(0);
+  const [isSoundPlaying, setIsSoundPlaying] = useState(false);
 
   // Sound playing state
   const lastSoundTimeRef = useRef(0);
   const lastSoundFileRef = useRef("");
+  const currentAudioRef = useRef(null);
 
   // Function to play sound effects
   const playSound = (soundEffect) => {
@@ -302,25 +304,65 @@ const TypewriterText = ({
       }
 
       console.log(`🎵 Playing sound: ${soundEffect.file}`);
+
+      // Stop any currently playing audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+      }
+
       const audio = new Audio(`/${soundEffect.file}`);
       audio.volume = 0.5;
+      currentAudioRef.current = audio;
+
+      // Set sound playing state
+      setIsSoundPlaying(true);
 
       audio.addEventListener("error", (e) => {
         console.error(`❌ Error loading sound: ${soundEffect.file}`, e);
+        setIsSoundPlaying(false);
       });
 
-      audio.play().catch((error) => {
-        console.log(
-          `🔇 Could not play sound: ${soundEffect.file}`,
-          error.message
-        );
+      // Limit sound duration to 2 seconds
+      audio.addEventListener("loadedmetadata", () => {
+        if (audio.duration > 2) {
+          setTimeout(() => {
+            audio.pause();
+            audio.currentTime = 0;
+            setIsSoundPlaying(false);
+            console.log(
+              `⏹️ Sound stopped after 2 seconds: ${soundEffect.file}`
+            );
+          }, 2000);
+        }
       });
+
+      // Handle sound end
+      audio.addEventListener("ended", () => {
+        setIsSoundPlaying(false);
+        console.log(`🔚 Sound ended: ${soundEffect.file}`);
+      });
+
+      audio
+        .play()
+        .then(() => {
+          // If sound is naturally shorter than 2 seconds, it will end normally
+          // The ended event listener will handle setting isSoundPlaying to false
+        })
+        .catch((error) => {
+          console.log(
+            `🔇 Could not play sound: ${soundEffect.file}`,
+            error.message
+          );
+          setIsSoundPlaying(false);
+        });
 
       // Update tracking variables
       lastSoundTimeRef.current = now;
       lastSoundFileRef.current = soundEffect.file;
     } catch (error) {
       console.log(`🔇 Sound file not found: ${soundEffect.file}`);
+      setIsSoundPlaying(false);
     }
   };
 
@@ -342,6 +384,14 @@ const TypewriterText = ({
       setCurrentCharacterCount(0);
       setIsComplete(false);
       setSoundCue(null);
+      setIsSoundPlaying(false);
+
+      // Stop any currently playing audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current = null;
+      }
     }
   }, [text]);
 
@@ -360,8 +410,8 @@ const TypewriterText = ({
     if (currentItem.type === "speech") {
       setSoundCue(null); // Clear any sound cue
 
-      // Type out the speech
-      if (currentIndex < currentItem.text.length) {
+      // Only proceed with typing if no sound is playing
+      if (!isSoundPlaying && currentIndex < currentItem.text.length) {
         const currentChar = currentItem.text[currentIndex];
 
         const timeout = setTimeout(() => {
@@ -371,11 +421,12 @@ const TypewriterText = ({
         }, speed);
 
         return () => clearTimeout(timeout);
-      } else {
+      } else if (!isSoundPlaying && currentIndex >= currentItem.text.length) {
         // Speech is done, move to next item
         setCurrentScriptIndex((prev) => prev + 1);
         setCurrentIndex(0);
       }
+      // If sound is playing, don't advance the typewriter
     } else if (currentItem.type === "sound") {
       // Play sound and show cue
       setSoundCue(currentItem);
@@ -389,7 +440,7 @@ const TypewriterText = ({
 
       return () => clearTimeout(timeout);
     }
-  }, [currentScriptIndex, currentIndex, script, speed]);
+  }, [currentScriptIndex, currentIndex, script, speed, isSoundPlaying]);
 
   // Cursor blinking effect
   useEffect(() => {
@@ -400,14 +451,33 @@ const TypewriterText = ({
     return () => clearInterval(cursorInterval);
   }, []);
 
+  // Cleanup audio on unmount
+  useEffect(() => {
+    return () => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current = null;
+      }
+    };
+  }, []);
+
   const handleRestart = () => {
     if (canRestart && isComplete) {
+      // Stop any currently playing audio
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current = null;
+      }
+
       setCurrentScriptIndex(0);
       setDisplayedText("");
       setCurrentIndex(0);
       setCurrentCharacterCount(0);
       setIsComplete(false);
       setSoundCue(null);
+      setIsSoundPlaying(false);
     }
   };
 
@@ -449,14 +519,6 @@ const TypewriterText = ({
           </span>
         )}
       </div>
-
-      {/* Sound Cue Display */}
-      {soundCue && (
-        <div className="mt-4 p-3 bg-blue-900/50 border border-blue-500 rounded-lg text-blue-300 text-sm animate-pulse">
-          <span className="mr-2 text-xl">{soundCue.emoji}</span>
-          <em>{soundCue.cue}</em>
-        </div>
-      )}
 
       {/* Restart Button */}
       {isComplete && canRestart && (

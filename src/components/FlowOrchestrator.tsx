@@ -4,6 +4,7 @@ import MockVideo from './mockVideo';
 import EnterButton2 from './enterButton2';
 import GitInput from './gitInput';
 import Fillers from './fillers';
+import Roast from './roast';
 
 // Flow Steps Configuration - Comment out steps you want to skip
 const FLOW_STEPS = [
@@ -12,6 +13,7 @@ const FLOW_STEPS = [
   // 'ENTER_BUTTON_2',  // Second enter button
   'GIT_INPUT',       // GitHub username input
   'FILLERS',         // Fillers with audio
+  'ROAST',           // User-specific roast
   'COMPLETE'         // Flow completion
 ];
 
@@ -79,7 +81,15 @@ const FlowOrchestrator = () => {
         <Fillers onComplete={() => advanceToNextStep()} />
       )}
 
-      {/* Step 6: Flow Complete - Comment this block to skip */}
+      {/* Step 6: User-specific Roast - Comment this block to skip */}
+      {currentStep === 'ROAST' && (
+        <Roast 
+          username={username} 
+          onComplete={() => advanceToNextStep()}
+        />
+      )}
+
+      {/* Step 7: Flow Complete - Comment this block to skip */}
       {currentStep === 'COMPLETE' && (
         <div style={{
           display: 'flex',
@@ -91,7 +101,7 @@ const FlowOrchestrator = () => {
         }}>
           <div>
             
-            {username && <p>{username}</p>}
+            <h4>Completed!</h4>
           </div>
         </div>
       )}

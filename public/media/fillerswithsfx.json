@@ -1,0 +1,99 @@
+{
+  "audio_roast_collection": {
+    "title": "Roast Fillers",
+    "description": "The sequence of general-purpose roasts and sound effects that play before the main analysis.",
+    "sfx_intro": "micmoving.mp3",
+    "sfx_outro": "micdrop.mp3",
+    "roast_sequence": [
+      {
+        "order": 1,
+        "stage_name": "The Greeting",
+        "options": [
+          {
+            "filename": "eleven.wav",
+            "content": "Ladies and gentlemen, a wild username appears."
+          },
+          {
+            "filename": "five.wav",
+            "content": "So, you typed in your username. Brave move."
+          },
+          {
+            "filename": "one.wav",
+            "content": "Oh, look who showed up, another hero with a GitHub account."
+          }
+        ],
+        "sfx_transition": "rimshot.mp3"
+      },
+      {
+        "order": 2,
+        "stage_name": "The Setup",
+        "options": [
+          {
+            "filename": "ten.wav",
+            "content": "Do you even know what's inside your own repos? Yeah, we do."
+          },
+          {
+            "filename": "six.wav",
+            "content": "Hope you didn't expect us to clap for your profile picture."
+          },
+          {
+            "filename": "two.wav",
+            "content": "Don't worry, your profile full of half-baked repos is safe, for now."
+          }
+        ],
+        "sfx_transition": "crowdgasp.mp3"
+      },
+      {
+        "order": 3,
+        "stage_name": "The Warning",
+        "options": [
+          {
+            "filename": "nine.wav",
+            "content": "Buckle up. It's not just commits getting pushed around today."
+          },
+          {
+            "filename": "seven.wav",
+            "content": "You ready? No, you're not. Nobody ever is."
+          }
+        ],
+        "sfx_transition": "airhorn.mp3"
+      },
+      {
+        "order": 4,
+        "stage_name": "The Promise",
+        "options": [
+          {
+            "filename": "eight.wav",
+            "content": "This roast will be faster than your internet and harsher than your code reviews."
+          }
+        ],
+        "sfx_transition": "crowdboos.mp3"
+      },
+      {
+        "order": 5,
+        "stage_name": "The Hype",
+        "options": [
+          {
+            "filename": "twelve.wav",
+            "content": "Get ready, because even your forks are going to feel this burn."
+          },
+          {
+            "filename": "three.wav",
+            "content": "Sit tight, this is about to hurt more than a merge conflict."
+          }
+        ],
+        "sfx_transition": "crickets.mp3"
+      },
+      {
+        "order": 6,
+        "stage_name": "The Final Word",
+        "options": [
+          {
+            "filename": "four.wav",
+            "content": "You might want to keep a bucket of ice nearby."
+          }
+        ]
+      }
+    ]
+  }
+}

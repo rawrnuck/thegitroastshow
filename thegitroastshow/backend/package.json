@@ -18,6 +18,7 @@
   "author": "Your Name",
   "license": "MIT",
   "dependencies": {
+    "@elevenlabs/elevenlabs-js": "^2.15.0",
     "@huggingface/inference": "^4.8.0",
     "axios": "^1.12.1",
     "cors": "^2.8.5",

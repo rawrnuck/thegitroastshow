@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { roastAPI } from "../services/api";
+import { useTextToSpeech } from "../hooks/useTextToSpeech";
 import type { RoastItem, SoundItem, SpeechItem } from "../types/api";
 
 // Define props for the Roast component
@@ -39,6 +40,14 @@ const Roast = ({ onComplete, username = "user" }: RoastProps) => {
   const [currentEmoji, setCurrentEmoji] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Initialize TTS with ElevenLabs preference
+  const [ttsState, ttsControls] = useTextToSpeech({
+    preferElevenLabs: true,
+    rate: 1.1,
+    pitch: 1,
+    volume: 1,
+  });
 
   // Initialize with loading state, then fetch from API
   const [roastData, setRoastData] = useState<RoastItem[]>(loadingRoastData);
@@ -223,6 +232,13 @@ const Roast = ({ onComplete, username = "user" }: RoastProps) => {
     fetchRoastData();
   }, [username]);
 
+  // Cleanup TTS when component unmounts
+  useEffect(() => {
+    return () => {
+      ttsControls.cancel();
+    };
+  }, [ttsControls]);
+
   // Effect to process the roast sequence
   useEffect(() => {
     if (isLoading) return; // Don't start until data is loaded
@@ -251,36 +267,170 @@ const Roast = ({ onComplete, username = "user" }: RoastProps) => {
           });
         }, 500); // Delay before playing sound
       } else if (currentItem.type === "speech") {
-        // Display text
+        // Reset and prepare for new text
         setTypedText("");
         setShowText(true);
 
         // Personalize the text with the username
         const personalizedText = personalizeText(currentItem.text);
 
-        // Type out the text
-        const textLength = personalizedText.length;
-        const typingDuration = Math.max(3000, textLength * 100); // Much slower typing
+        // Keep track of speech state and typing state
+        let isSpeechStarted = false;
+        let typingComplete = false;
+        let typingIntervalId: number | null = null;
 
-        let currentTextIndex = 0;
-        const typingInterval = setInterval(() => {
-          if (currentTextIndex <= textLength) {
-            setTypedText(personalizedText.substring(0, currentTextIndex));
-            currentTextIndex++;
-          } else {
-            clearInterval(typingInterval);
+        // We'll use a ref to track if this specific speech item is active
+        const activeSpeechRef = { current: true };
 
-            // Move to next item after a much longer delay for reading
-            setTimeout(() => {
+        // Function to handle speech start
+        const onSpeechStart = () => {
+          if (!activeSpeechRef.current) return; // Safety check
+          isSpeechStarted = true;
+
+          // If typing is falling behind speech, speed it up
+          if (!typingComplete && typingIntervalId) {
+            const remainingText = personalizedText.length - typedText.length;
+            if (remainingText > 20) {
+              // If we have more than 20 chars left to type
+              clearInterval(typingIntervalId);
+              startTyping(Math.max(30, typingDuration / 2)); // Faster typing
+            }
+          }
+        };
+
+        // Function to handle speech end
+        const onSpeechEnd = () => {
+          if (!activeSpeechRef.current) return; // Safety check
+
+          // If typing isn't complete, finish it immediately
+          if (!typingComplete) {
+            setTypedText(personalizedText);
+            typingComplete = true;
+            if (typingIntervalId) {
+              clearInterval(typingIntervalId);
+              typingIntervalId = null;
+            }
+          }
+
+          // Wait a moment before proceeding to next item
+          setTimeout(() => {
+            if (activeSpeechRef.current) {
+              // Make sure we're still active
               setShowText(false);
               setTimeout(() => {
-                setCurrentItemIndex((prev) => prev + 1);
-              }, 1000); // Longer exit transition
-            }, 3000); // Long pause at the end of a sentence
-          }
-        }, typingDuration / textLength);
+                if (activeSpeechRef.current) {
+                  // Double check still active
+                  activeSpeechRef.current = false; // Mark as inactive
+                  setCurrentItemIndex((prev) => prev + 1);
+                }
+              }, 800);
+            }
+          }, 1000);
+        };
 
-        return () => clearInterval(typingInterval);
+        // Calculate typing duration based on text length with reasonable bounds
+        const textLength = personalizedText.length;
+        const baseDuration = 60; // ms per character
+        // Longer texts get faster typing (but never faster than 30ms per char)
+        const charDuration =
+          textLength > 100
+            ? Math.max(30, baseDuration - textLength / 10)
+            : baseDuration;
+        const typingDuration = Math.max(2000, textLength * charDuration); // At least 2 seconds
+
+        // Function to start the typing animation
+        const startTyping = (duration = typingDuration) => {
+          let currentTextIndex = typedText.length;
+
+          // Create a new interval with the given duration
+          typingIntervalId = window.setInterval(() => {
+            if (!activeSpeechRef.current) {
+              // This speech item is no longer active, cleanup
+              if (typingIntervalId) clearInterval(typingIntervalId);
+              return;
+            }
+
+            if (currentTextIndex <= textLength) {
+              setTypedText(personalizedText.substring(0, currentTextIndex));
+              currentTextIndex++;
+            } else {
+              // Typing is complete
+              typingComplete = true;
+              if (typingIntervalId) {
+                clearInterval(typingIntervalId);
+                typingIntervalId = null;
+              }
+
+              // If speech has already finished, move to next item
+              if (!ttsState.speaking) {
+                onSpeechEnd();
+              }
+            }
+          }, duration / textLength);
+        };
+
+        // Start typing immediately
+        startTyping();
+
+        // Setup speech event listeners
+        const speechStartListener = () => onSpeechStart();
+        const speechEndListener = () => onSpeechEnd();
+
+        // Custom event system for speech events
+        document.addEventListener("tts-started", speechStartListener);
+        document.addEventListener("tts-ended", speechEndListener);
+
+        // Start TTS with a small delay to allow typing to begin first
+        setTimeout(() => {
+          if (activeSpeechRef.current) {
+            ttsControls.speak(personalizedText);
+
+            // Fallback - if speech doesn't start or end properly
+            setTimeout(() => {
+              if (activeSpeechRef.current && !isSpeechStarted) {
+                console.warn("Speech failed to start, using fallback timing");
+                onSpeechStart();
+
+                // Estimate speech duration based on text length and speaking rate
+                // Average speaking rate is ~150 words per minute = ~2.5 words per second
+                // Average word is ~5 characters, so ~12.5 chars per second
+                const speechDuration = Math.max(
+                  3000,
+                  (textLength / 12.5) * 1000
+                );
+
+                setTimeout(() => {
+                  if (activeSpeechRef.current && ttsState.speaking) {
+                    console.warn("Speech failed to end, using fallback timing");
+                    // Cancel any ongoing speech and trigger end
+                    ttsControls.cancel();
+                    onSpeechEnd();
+                  }
+                }, speechDuration + 1000);
+              }
+            }, 2000);
+          }
+        }, 300);
+
+        // Cleanup function
+        return () => {
+          // Mark this speech item as inactive
+          activeSpeechRef.current = false;
+
+          // Clean up typing interval
+          if (typingIntervalId) {
+            clearInterval(typingIntervalId);
+          }
+
+          // Clean up event listeners
+          document.removeEventListener("tts-started", speechStartListener);
+          document.removeEventListener("tts-ended", speechEndListener);
+
+          // Cancel TTS if component unmounts or moves to next item
+          ttsControls.cancel();
+        };
+
+        // Cleanup function was moved above with the rest of the speech implementation
       }
     };
 
@@ -387,6 +537,40 @@ const Roast = ({ onComplete, username = "user" }: RoastProps) => {
         </motion.div>
       )}
 
+      {/* TTS Status Indicator */}
+      {ttsState.speaking && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          style={{
+            position: "absolute",
+            top: "10%",
+            right: "5%",
+            display: "flex",
+            alignItems: "center",
+            color: ttsState.usingElevenLabs ? "#00ff00" : "#ffaa00",
+            fontSize: "0.9rem",
+            fontFamily: '"Barriecito", cursive',
+            background: "rgba(0,0,0,0.7)",
+            padding: "0.5rem 1rem",
+            borderRadius: "20px",
+          }}
+        >
+          <div
+            style={{
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              backgroundColor: ttsState.usingElevenLabs ? "#00ff00" : "#ffaa00",
+              marginRight: "0.5rem",
+              animation: "pulse 1s infinite",
+            }}
+          />
+          {ttsState.usingElevenLabs ? "🎙️ ElevenLabs" : "🔊 Browser TTS"}
+        </motion.div>
+      )}
+
       {/* Sound cue display */}
       <AnimatePresence mode="wait">
         {showCue &&
@@ -441,11 +625,15 @@ const Roast = ({ onComplete, username = "user" }: RoastProps) => {
           )}
       </AnimatePresence>
 
-      {/* Keyframe animation for spinner */}
+      {/* Keyframe animation for spinner and pulse */}
       <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
       `}</style>
     </div>

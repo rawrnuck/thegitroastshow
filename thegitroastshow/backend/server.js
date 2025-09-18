@@ -7,6 +7,7 @@ require("dotenv").config();
 const roastRoutes = require("./src/routes/roast");
 const userRoutes = require("./src/routes/user");
 const healthRoutes = require("./src/routes/health");
+const ttsRoutes = require("./src/routes/tts");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -56,6 +57,7 @@ app.use(rateLimiterMiddleware);
 app.use("/api/health", healthRoutes);
 app.use("/api/roast", roastRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/tts", ttsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

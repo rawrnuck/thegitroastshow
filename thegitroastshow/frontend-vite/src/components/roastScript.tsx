@@ -68,6 +68,10 @@ const RoastScript = ({
     const fetchRoastData = async () => {
       setIsLoading(true);
 
+      // Reset TTS engine at the start of each new roast to ensure consistent voice
+      console.log("Resetting TTS engine at the beginning of new roast session");
+      ttsControls.resetTTSEngine();
+
       // If we have prefetched data, use it instead of fetching again
       if (prefetchedRoastData && prefetchedRoastData.length > 0) {
         console.log("Using prefetched roast data:", prefetchedRoastData);

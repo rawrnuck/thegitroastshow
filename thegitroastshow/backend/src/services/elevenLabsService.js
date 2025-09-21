@@ -5,7 +5,7 @@ const FormData = require("form-data");
 
 class ElevenLabsService {
   constructor() {
-    // this.apiKey = process.env.ELEVENLABS_API_KEY;
+    this.apiKey = process.env.ELEVENLABS_API_KEY;
     this.model = "eleven_flash_v2_5";
     this.baseUrl = "https://api.elevenlabs.io/v1";
 

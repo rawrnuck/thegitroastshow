@@ -16,6 +16,7 @@ export interface TextToSpeechState {
   options: TextToSpeechOptions;
   usingElevenLabs: boolean;
   elevenLabsAvailable: boolean;
+  sessionTTSEngine: "elevenlabs" | "webspeech" | null; // Track which TTS engine is used for this session
 }
 
 export interface TextToSpeechControls {
@@ -28,6 +29,7 @@ export interface TextToSpeechControls {
   setPitch: (pitch: number) => void;
   setVolume: (volume: number) => void;
   setPreferElevenLabs: (prefer: boolean) => void;
+  resetTTSEngine: () => void; // Add function to reset TTS engine for new roast session
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -43,6 +45,10 @@ export const useTextToSpeech = (
   const [paused, setPaused] = useState(false);
   const [usingElevenLabs, setUsingElevenLabs] = useState(false);
   const [elevenLabsAvailable, setElevenLabsAvailable] = useState(false);
+  // Track which TTS engine is being used for the entire roast session
+  const [sessionTTSEngine, setSessionTTSEngine] = useState<
+    "elevenlabs" | "webspeech" | null
+  >(null);
   const [options, setOptions] = useState<TextToSpeechOptions>({
     rate: defaultOptions?.rate || 1,
     pitch: defaultOptions?.pitch || 1,
@@ -603,14 +609,14 @@ export const useTextToSpeech = (
     };
   }, []);
 
-  // Main speak function with intelligent fallback and retry
+  // Main speak function that uses one TTS engine consistently throughout a roast session
   const speak = useCallback(
     async (text: string) => {
       if (!text) return;
 
       // Always cancel any ongoing speech to prevent overlaps
       cancel();
-      
+
       // Dispatch event to notify that speech is starting
       dispatchSpeechEvent("tts-starting");
 
@@ -621,62 +627,96 @@ export const useTextToSpeech = (
         return;
       }
 
-      // Only try ElevenLabs if we're online and it's preferred
-      if (isOnline && options.preferElevenLabs && elevenLabsAvailable) {
-        try {
-          console.log("Attempting ElevenLabs TTS for:", cleanText.substring(0, 50) + "...");
-          
-          // Set a timeout for the ElevenLabs attempt
-          const timeoutPromise = new Promise<boolean>((resolve) => {
-            setTimeout(() => {
-              console.log("ElevenLabs TTS timeout triggered");
-              resolve(false);
-            }, 3500);
-          });
+      // First speech in the roast session - decide which TTS to use for entire session
+      if (sessionTTSEngine === null) {
+        // Make decision based on availability
+        if (isOnline && options.preferElevenLabs && elevenLabsAvailable) {
+          // Try ElevenLabs first
+          try {
+            console.log("Starting roast with ElevenLabs TTS");
 
-          // Race between the actual TTS request and the timeout
-          const success = await Promise.race([
-            speakWithElevenLabs(cleanText),
-            timeoutPromise,
-          ]);
+            // Use a longer timeout for the initial TTS decision
+            const timeoutPromise = new Promise<boolean>((resolve) => {
+              setTimeout(() => {
+                console.log("ElevenLabs TTS initial attempt timeout triggered");
+                resolve(false);
+              }, 5000); // Longer timeout for initial session selection
+            });
 
-          if (success) {
-            console.log("ElevenLabs TTS successful");
+            // Race between the actual TTS request and the timeout
+            const success = await Promise.race([
+              speakWithElevenLabs(cleanText),
+              timeoutPromise,
+            ]);
+
+            if (success) {
+              console.log(
+                "ElevenLabs TTS successful - will use for entire roast session"
+              );
+              setSessionTTSEngine("elevenlabs");
+              return;
+            }
+
+            console.log(
+              "ElevenLabs failed, using Web Speech API for entire session"
+            );
+            setSessionTTSEngine("webspeech");
+            speakWithWebAPI(cleanText);
+            return;
+          } catch (error) {
+            console.warn(
+              "Error with ElevenLabs, using Web Speech API for session:",
+              error
+            );
+            setSessionTTSEngine("webspeech");
+            speakWithWebAPI(cleanText);
             return;
           }
-
-          console.log(
-            "ElevenLabs failed or timed out, falling back to Web Speech API"
-          );
-        } catch (error) {
-          console.warn("Error in ElevenLabs TTS:", error);
+        } else {
+          // Use Web Speech directly for entire session
+          console.log("Starting roast with Web Speech API");
+          setSessionTTSEngine("webspeech");
+          speakWithWebAPI(cleanText);
+          return;
         }
-      } else if (!isOnline) {
-        console.log("Device is offline. Using Web Speech API directly.");
       }
 
-      // Fallback to Web Speech API - more reliable offline
-      try {
-        console.log("Using Web Speech API TTS");
+      // For all subsequent speeches in this session, use the established session TTS engine
+      if (sessionTTSEngine === "elevenlabs") {
+        console.log(
+          "Using session TTS (ElevenLabs) for:",
+          cleanText.substring(0, 50) + "..."
+        );
+        const success = await speakWithElevenLabs(cleanText);
+
+        // If ElevenLabs fails mid-session, log error but don't change engines to maintain voice consistency
+        if (!success) {
+          console.error(
+            "ElevenLabs failed mid-roast, but maintaining consistency"
+          );
+          dispatchSpeechEvent("tts-error");
+          setSpeaking(false);
+          setPaused(false);
+        }
+      } else {
+        // Use Web Speech API for entire session
+        console.log(
+          "Using session TTS (Web Speech API) for:",
+          cleanText.substring(0, 50) + "..."
+        );
         speakWithWebAPI(cleanText);
-      } catch (error) {
-        console.error("Error in Web Speech API:", error);
-        dispatchSpeechEvent("tts-error");
-        
-        // Final fallback: just set speaking to false to unblock any waiting code
-        setSpeaking(false);
-        setPaused(false);
-        setUsingElevenLabs(false);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
+      sessionTTSEngine,
       isOnline,
       options.preferElevenLabs,
       elevenLabsAvailable,
       speakWithElevenLabs,
       speakWithWebAPI,
       cleanTextForSpeech,
+      dispatchSpeechEvent,
     ]
   );
 
@@ -745,6 +785,12 @@ export const useTextToSpeech = (
     setOptions((prev) => ({ ...prev, preferElevenLabs: prefer }));
   }, []);
 
+  // Add resetTTSEngine function to reset the session TTS engine for a new roast
+  const resetTTSEngine = useCallback(() => {
+    console.log("Resetting TTS engine for new roast session");
+    setSessionTTSEngine(null);
+  }, []);
+
   const state: TextToSpeechState = {
     speaking,
     paused,
@@ -752,6 +798,7 @@ export const useTextToSpeech = (
     options,
     usingElevenLabs,
     elevenLabsAvailable,
+    sessionTTSEngine, // Include the session TTS engine in state
   };
 
   const controls: TextToSpeechControls = {
@@ -764,6 +811,7 @@ export const useTextToSpeech = (
     setPitch,
     setVolume,
     setPreferElevenLabs,
+    resetTTSEngine, // Add the reset function to controls
   };
 
   return [state, controls];

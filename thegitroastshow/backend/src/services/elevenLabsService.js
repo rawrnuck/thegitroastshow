@@ -5,7 +5,7 @@ const FormData = require("form-data");
 
 class ElevenLabsService {
   constructor() {
-    this.apiKey = process.env.ELEVENLABS_API_KEY;
+    // this.apiKey = process.env.ELEVENLABS_API_KEY;
     this.model = "eleven_flash_v2_5";
     this.baseUrl = "https://api.elevenlabs.io/v1";
 
@@ -57,7 +57,7 @@ class ElevenLabsService {
 
     try {
       const {
-        voiceId = "21m00Tcm4TlvDq8ikWAM", // Rachel voice ID
+        voiceId = "2EiwWnXFnvU5JabPnv8n", // Rachel voice ID
         stability = 0.5,
         similarityBoost = 0.8,
         style = 0.0,

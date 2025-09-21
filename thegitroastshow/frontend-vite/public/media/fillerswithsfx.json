@@ -11,18 +11,21 @@
         "options": [
           {
             "filename": "eleven.wav",
-            "content": "Ladies and gentlemen, a wild username appears."
+            "content": "Ladies and gentlemen, a wild username appears.",
+            "cues": ["*crowd laughs*"]
           },
           {
             "filename": "five.wav",
-            "content": "So, you typed in your username. Brave move."
+            "content": "So, you typed in your username. Brave move.",
+            "cues": ["*crowd laughs*"]
           },
           {
             "filename": "one.wav",
-            "content": "Oh, look who showed up, another hero with a GitHub account."
+            "content": "Oh, look who showed up, another hero with a GitHub account.",
+            "cues": ["*crowd laughs*"]
           }
         ],
-        "sfx_transition": "rimshot.mp3"
+        "sfx_transition": "crowdlaugh.mp3"
       },
       {
         "order": 2,
@@ -30,15 +33,18 @@
         "options": [
           {
             "filename": "ten.wav",
-            "content": "Do you even know what's inside your own repos? Yeah, we do."
+            "content": "Do you even know what's inside your own repos? Yeah, we do.",
+            "cues": ["*crowd gasps*"]
           },
           {
             "filename": "six.wav",
-            "content": "Hope you didn't expect us to clap for your profile picture."
+            "content": "Hope you didn't expect us to clap for your profile picture.",
+            "cues": ["*crowd gasps*"]
           },
           {
             "filename": "two.wav",
-            "content": "Don't worry, your profile full of half-baked repos is safe, for now."
+            "content": "Don't worry, your profile full of half-baked repos is safe, for now.",
+            "cues": ["*crowd gasps*"]
           }
         ],
         "sfx_transition": "crowdgasp.mp3"
@@ -49,11 +55,13 @@
         "options": [
           {
             "filename": "nine.wav",
-            "content": "Buckle up. It's not just commits getting pushed around today."
+            "content": "Buckle up. It's not just commits getting pushed around today.",
+            "cues": ["*airhorn*"]
           },
           {
             "filename": "seven.wav",
-            "content": "You ready? No, you're not. Nobody ever is."
+            "content": "You ready? No, you're not. Nobody ever is.",
+            "cues": ["*airhorn*"]
           }
         ],
         "sfx_transition": "airhorn.mp3"
@@ -64,7 +72,8 @@
         "options": [
           {
             "filename": "eight.wav",
-            "content": "This roast will be faster than your internet and harsher than your code reviews."
+            "content": "This roast will be faster than your internet and harsher than your code reviews.",
+            "cues": ["*crowd boos*"]
           }
         ],
         "sfx_transition": "crowdboos.mp3"
@@ -75,14 +84,16 @@
         "options": [
           {
             "filename": "twelve.wav",
-            "content": "Get ready, because even your forks are going to feel this burn."
+            "content": "Get ready, because even your forks are going to feel this burn.",
+            "cues": ["*rimshot*"]
           },
           {
             "filename": "three.wav",
-            "content": "Sit tight, this is about to hurt more than a merge conflict."
+            "content": "Sit tight, this is about to hurt more than a merge conflict.",
+            "cues": ["*rimshot*"]
           }
         ],
-        "sfx_transition": "crickets.mp3"
+        "sfx_transition": "rimshot.mp3"
       },
       {
         "order": 6,
@@ -90,7 +101,8 @@
         "options": [
           {
             "filename": "four.wav",
-            "content": "You might want to keep a bucket of ice nearby."
+            "content": "You might want to keep a bucket of ice nearby.",
+            "cues": ["*mic drop*"]
           }
         ]
       }

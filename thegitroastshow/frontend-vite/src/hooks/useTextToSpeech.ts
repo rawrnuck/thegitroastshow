@@ -50,7 +50,7 @@ export const useTextToSpeech = (
     voice: defaultOptions?.voice || null,
     preferElevenLabs: defaultOptions?.preferElevenLabs ?? true,
     elevenLabsVoiceId:
-      defaultOptions?.elevenLabsVoiceId || "21m00Tcm4TlvDq8ikWAM", // Rachel
+      defaultOptions?.elevenLabsVoiceId || "2EiwWnXFnvU5JabPnv8n", // Rachel
   });
 
   // References for controlling playback
@@ -119,6 +119,7 @@ export const useTextToSpeech = (
     return () => {
       window.speechSynthesis?.removeEventListener("voiceschanged", getVoices);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Clean up any speaking on unmount
@@ -160,6 +161,11 @@ export const useTextToSpeech = (
 
   // Cache for storing generated audio
   const audioCache = useRef<Map<string, string>>(new Map());
+
+  // Custom event dispatcher for speech events
+  const dispatchSpeechEvent = useCallback((eventName: string) => {
+    document.dispatchEvent(new CustomEvent(eventName));
+  }, []);
 
   // ElevenLabs TTS function with improved error handling and caching
   const speakWithElevenLabs = useCallback(
@@ -263,10 +269,11 @@ export const useTextToSpeech = (
               const errorData = await response.json();
               console.error("ElevenLabs API error:", errorData);
               errorMessage = errorData.error || errorMessage;
-            } catch (e) {
+            } catch {
               console.error("Failed to parse error response");
             }
           }
+          console.error("TTS Error:", errorMessage);
           return false;
         }
 
@@ -373,13 +380,8 @@ export const useTextToSpeech = (
         return false;
       }
     },
-    [options.elevenLabsVoiceId, cleanTextForSpeech]
+    [options.elevenLabsVoiceId, cleanTextForSpeech, dispatchSpeechEvent]
   );
-
-  // Custom event dispatcher for speech events
-  const dispatchSpeechEvent = useCallback((eventName: string) => {
-    document.dispatchEvent(new CustomEvent(eventName));
-  }, []);
 
   // Web Speech API fallback function with improved reliability
   const speakWithWebAPI = useCallback(
@@ -582,7 +584,7 @@ export const useTextToSpeech = (
         }, 10000);
       }, 100); // Small delay to ensure cancel takes effect
     },
-    [options, cleanTextForSpeech]
+    [options, cleanTextForSpeech, dispatchSpeechEvent]
   );
 
   // Track network connection status
@@ -608,17 +610,28 @@ export const useTextToSpeech = (
 
       // Always cancel any ongoing speech to prevent overlaps
       cancel();
+      
+      // Dispatch event to notify that speech is starting
+      dispatchSpeechEvent("tts-starting");
 
       // Clean the text once here to be used for all TTS attempts
       const cleanText = cleanTextForSpeech(text);
-      if (!cleanText) return;
+      if (!cleanText) {
+        dispatchSpeechEvent("tts-error");
+        return;
+      }
 
       // Only try ElevenLabs if we're online and it's preferred
       if (isOnline && options.preferElevenLabs && elevenLabsAvailable) {
         try {
+          console.log("Attempting ElevenLabs TTS for:", cleanText.substring(0, 50) + "...");
+          
           // Set a timeout for the ElevenLabs attempt
           const timeoutPromise = new Promise<boolean>((resolve) => {
-            setTimeout(() => resolve(false), 3000);
+            setTimeout(() => {
+              console.log("ElevenLabs TTS timeout triggered");
+              resolve(false);
+            }, 3500);
           });
 
           // Race between the actual TTS request and the timeout
@@ -627,7 +640,10 @@ export const useTextToSpeech = (
             timeoutPromise,
           ]);
 
-          if (success) return;
+          if (success) {
+            console.log("ElevenLabs TTS successful");
+            return;
+          }
 
           console.log(
             "ElevenLabs failed or timed out, falling back to Web Speech API"
@@ -640,8 +656,20 @@ export const useTextToSpeech = (
       }
 
       // Fallback to Web Speech API - more reliable offline
-      speakWithWebAPI(cleanText);
+      try {
+        console.log("Using Web Speech API TTS");
+        speakWithWebAPI(cleanText);
+      } catch (error) {
+        console.error("Error in Web Speech API:", error);
+        dispatchSpeechEvent("tts-error");
+        
+        // Final fallback: just set speaking to false to unblock any waiting code
+        setSpeaking(false);
+        setPaused(false);
+        setUsingElevenLabs(false);
+      }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       isOnline,
       options.preferElevenLabs,

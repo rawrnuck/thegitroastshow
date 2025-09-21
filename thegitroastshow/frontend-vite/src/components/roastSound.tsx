@@ -1,69 +1,147 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 
-interface FillerOption {
+interface RoastSoundOption {
   filename: string;
   content: string;
 }
 
-interface FillerStage {
+interface RoastSoundStage {
   order: number;
   stage_name: string;
-  options: FillerOption[];
+  options: RoastSoundOption[];
   sfx_transition?: string;
 }
 
-interface AudioRoastCollection {
+interface RoastSoundCollection {
   title: string;
   description: string;
   sfx_intro: string;
   sfx_outro: string;
-  roast_sequence: FillerStage[];
+  roast_sequence: RoastSoundStage[];
 }
 
-interface FillerData {
-  audio_roast_collection: AudioRoastCollection;
+interface RoastSoundData {
+  audio_roast_collection: RoastSoundCollection;
 }
 
-interface FillersProps {
+interface RoastSoundProps {
   onComplete: () => void;
-  username?: string; // Add username prop to show personalized loading message
+  username?: string;
 }
 
-const Fillers = ({ onComplete, username }: FillersProps) => {
-  const [fillerData, setFillerData] = useState<FillerData | null>(null);
+const RoastSound = ({ onComplete, username = "user" }: RoastSoundProps) => {
+  const [roastData, setRoastData] = useState<RoastSoundData | null>(null);
   const [currentStageIndex, setCurrentStageIndex] = useState(-1);
-  const [currentOption, setCurrentOption] = useState<FillerOption | null>(null);
+  const [currentOption, setCurrentOption] = useState<RoastSoundOption | null>(null);
   const [showText, setShowText] = useState(false);
   const [typedText, setTypedText] = useState('');
   const [currentCue, setCurrentCue] = useState<string>('');
-  const [isProcessing, setIsProcessing] = useState(false); // Prevent overlapping executions
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const sfxRef = useRef<HTMLAudioElement | null>(null);
   const typingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const cueTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Load filler data
+  // Load roast data - this would be fetched from API based on username
   useEffect(() => {
-    const loadFillerData = async () => {
+    const loadRoastData = async () => {
       try {
-        const response = await fetch('/media/fillerswithsfx.json');
-        const data: FillerData = await response.json();
-        setFillerData(data);
-        console.log("Loaded filler data with SFX");
+        // For now, using a mock structure similar to fillers
+        // In real implementation, this would fetch user-specific roast data
+        const mockData: RoastSoundData = {
+          audio_roast_collection: {
+            title: `Roasting ${username}`,
+            description: `A personalized roast for ${username}`,
+            sfx_intro: "micmoving.mp3",
+            sfx_outro: "applause.mp3",
+            roast_sequence: [
+              {
+                order: 1,
+                stage_name: "Opening",
+                options: [
+                  {
+                    filename: `${username}_intro_01.mp3`,
+                    content: `Ladies and gentlemen, please welcome ${username} to tonight's roast!`
+                  }
+                ],
+                sfx_transition: "applause.mp3"
+              },
+              {
+                order: 2,
+                stage_name: "GitHub Analysis",
+                options: [
+                  {
+                    filename: `${username}_github_01.mp3`,
+                    content: `I took a look at ${username}'s GitHub profile, and wow... I've seen more activity in abandoned repositories!`
+                  }
+                ],
+                sfx_transition: "crowdboos.mp3"
+              },
+              {
+                order: 3,
+                stage_name: "Code Quality",
+                options: [
+                  {
+                    filename: `${username}_code_01.mp3`,
+                    content: `${username}'s code is so clean, it makes Marie Kondo jealous. Too bad clean doesn't mean functional!`
+                  }
+                ],
+                sfx_transition: "rimshot.mp3"
+              },
+              {
+                order: 4,
+                stage_name: "Closing",
+                options: [
+                  {
+                    filename: `${username}_closing_01.mp3`,
+                    content: `That's all for tonight, folks! Let's give it up one more time for ${username}!`
+                  }
+                ]
+              }
+            ]
+          }
+        };
+        
+        // In real implementation, you would fetch this data:
+        // const response = await roastAPI.getRoastAudioCollection(username);
+        // const data: RoastSoundData = await response.json();
+        
+        setRoastData(mockData);
+        console.log("Loaded roast sound data for:", username);
       } catch (error) {
-        console.error("Error loading filler data:", error);
+        console.error("Error loading roast sound data:", error);
+        // Fallback data
+        setRoastData({
+          audio_roast_collection: {
+            title: "Default Roast",
+            description: "A generic roast",
+            sfx_intro: "micmoving.mp3",
+            sfx_outro: "applause.mp3",
+            roast_sequence: [
+              {
+                order: 1,
+                stage_name: "Generic",
+                options: [
+                  {
+                    filename: "generic_roast_01.mp3",
+                    content: "Welcome to tonight's roast! Unfortunately, we couldn't find enough material to roast properly."
+                  }
+                ]
+              }
+            ]
+          }
+        });
       }
     };
     
-    loadFillerData();
-  }, []);
+    loadRoastData();
+  }, [username]);
 
-  // Clean up function
+  // Cleanup function
   const cleanup = useCallback(() => {
     if (typingIntervalRef.current) {
-      clearInterval(typingIntervalRef.current);
+      clearTimeout(typingIntervalRef.current);
       typingIntervalRef.current = null;
     }
     if (cueTimeoutRef.current) {
@@ -106,7 +184,6 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
         sfxRef.current.onended = null;
         sfxRef.current.onerror = null;
         sfxRef.current.oncanplaythrough = null;
-        sfxRef.current.onloadedmetadata = null;
         
         // Set up new event handlers
         sfxRef.current.onended = () => {
@@ -143,14 +220,14 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
 
   // Improved typing animation
   const startTypingAnimation = useCallback((text: string, duration: number) => {
-    cleanup(); // Clean up any existing animation
+    cleanup();
     
     setTypedText('');
     
     if (!text) return;
     
     const totalChars = text.length;
-    const charDelay = Math.max(50, duration * 1000 / totalChars); // Minimum 50ms per char
+    const charDelay = Math.max(50, duration * 1000 / totalChars);
     
     let currentIndex = 0;
     
@@ -168,18 +245,22 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
     typeChar();
   }, [cleanup]);
 
-  // Function to play roast audio
-  const playRoast = useCallback((option: FillerOption): Promise<void> => {
+  // Function to play roast audio (pre-recorded, user-specific)
+  const playRoastAudio = useCallback((option: RoastSoundOption): Promise<void> => {
     return new Promise((resolve) => {
       if (!audioRef.current) {
         console.error("Roast audio element not available");
-        resolve();
+        // Fallback: show text for a reasonable duration
+        setTypedText(option.content);
+        setTimeout(resolve, Math.max(3000, option.content.length * 80));
         return;
       }
       
       try {
-        const audioPath = `/media/roasts/${option.filename}`;
-        console.log(`Playing roast: ${audioPath}`);
+        // In real implementation, these would be pre-generated audio files
+        // stored in a user-specific directory or CDN path
+        const audioPath = `/media/roasts/users/${username}/${option.filename}`;
+        console.log(`Playing roast audio: ${audioPath}`);
         
         // Stop any currently playing audio
         audioRef.current.pause();
@@ -199,8 +280,10 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
         
         audioRef.current.onerror = (e) => {
           console.error("Roast audio error:", e);
+          console.log("Falling back to text display");
+          // Fallback: show full text and wait
           setTypedText(option.content);
-          setTimeout(resolve, 2000);
+          setTimeout(resolve, Math.max(3000, option.content.length * 80));
         };
         
         audioRef.current.onloadedmetadata = () => {
@@ -215,32 +298,34 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
         audioRef.current.oncanplaythrough = () => {
           audioRef.current?.play().catch(error => {
             console.error("Error playing roast audio:", error);
+            console.log("Falling back to text display");
+            // Fallback: show full text and wait
             setTypedText(option.content);
-            setTimeout(resolve, 2000);
+            setTimeout(resolve, Math.max(3000, option.content.length * 80));
           });
         };
         
       } catch (error) {
         console.error("Error setting up roast audio:", error);
         setTypedText(option.content);
-        setTimeout(resolve, 2000);
+        setTimeout(resolve, 3000);
       }
     });
-  }, [startTypingAnimation]);
+  }, [startTypingAnimation, username]);
 
-  // Main sequence controller - only runs when not processing and data is available
+  // Main sequence controller
   const runSequence = useCallback(async () => {
-    if (!fillerData || isProcessing) return;
+    if (!roastData || isProcessing) return;
     
     setIsProcessing(true);
     
     try {
-      const roastSequence = fillerData.audio_roast_collection.roast_sequence;
+      const roastSequence = roastData.audio_roast_collection.roast_sequence;
       
       // Step -1: Play intro SFX
       if (currentStageIndex === -1) {
         console.log("Playing intro SFX");
-        await playSfx(fillerData.audio_roast_collection.sfx_intro);
+        await playSfx(roastData.audio_roast_collection.sfx_intro);
         setCurrentStageIndex(0);
         setIsProcessing(false);
         return;
@@ -248,9 +333,8 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
       
       // Check if we've completed all stages
       if (currentStageIndex >= roastSequence.length) {
-        console.log("All stages complete, playing outro SFX");
-        await playSfx(fillerData.audio_roast_collection.sfx_outro);
-        console.log("Fillers complete, calling onComplete");
+        console.log("All stages complete, playing outro");
+        await playSfx(roastData.audio_roast_collection.sfx_outro);
         onComplete();
         setIsProcessing(false);
         return;
@@ -258,7 +342,8 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
       
       // Play current stage roast
       const currentStage = roastSequence[currentStageIndex];
-      console.log(`Playing stage ${currentStageIndex + 1}/${roastSequence.length}: ${currentStage.stage_name}`);
+      
+      console.log(`Playing stage ${currentStageIndex + 1}: ${currentStage.stage_name}`);
       
       // Select random option from current stage
       const options = currentStage.options;
@@ -271,7 +356,7 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
       console.log(`Selected option: ${selectedOption.content}`);
       
       // Play the roast audio and wait for completion
-      await playRoast(selectedOption);
+      await playRoastAudio(selectedOption);
       
       // Play transition SFX if available
       if (currentStage.sfx_transition) {
@@ -288,15 +373,15 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
       }, 500);
       
     } catch (error) {
-      console.error("Error in sequence:", error);
+      console.error("Error in roast sequence:", error);
       setIsProcessing(false);
     }
-  }, [fillerData, currentStageIndex, isProcessing, playSfx, playRoast, onComplete]);
+  }, [roastData, currentStageIndex, isProcessing, playSfx, playRoastAudio, onComplete]);
 
-  // Trigger sequence when stage changes and not processing
+  // Trigger sequence when stage changes
   useEffect(() => {
     runSequence();
-}, [currentStageIndex, fillerData, runSequence]); // Removed runSequence from deps to prevent loops
+  }, [currentStageIndex, roastData, runSequence]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -304,20 +389,16 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
   }, [cleanup]);
 
   return (
-    <div className="fillers-container" style={{
-      position: 'fixed',
+    <div className="roast-sound-container" style={{
+      position: 'absolute',
       top: 0,
       left: 0,
-      width: '100vw',
-      height: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      justifyContent: 'center',
-      alignItems: 'center',
-      backgroundColor: '#111319',
-      zIndex: 200
+      width: '100%',
+      height: '100%',
+      pointerEvents: 'none', // Don't interfere with other components
+      zIndex: 1 // Lower z-index than RoastScript
     }}>
-      {/* Main audio for roasts */}
+      {/* Main audio for roast recordings */}
       <audio 
         ref={audioRef}
         preload="none"
@@ -329,86 +410,10 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
         preload="none"
       />
       
-      {/* Cue display */}
-      <AnimatePresence mode="wait">
-        {currentCue && (
-          <motion.div
-            key={currentCue}
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 0.8, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            style={{
-              position: 'absolute',
-              top: '15%',
-              fontSize: '1.4rem',
-              color: '#00a0a0',
-              fontFamily: '"Barriecito", cursive',
-              textAlign: 'center',
-              
-              padding: '0.5rem 1rem',
-              borderRadius: '8px',
-              backdropFilter: 'blur(4px)'
-            }}
-          >
-            {currentCue}
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
-      {/* Text display */}
-      <AnimatePresence mode="wait">
-        {showText && currentOption && (
-          <motion.div
-            key={currentOption.filename}
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            transition={{ duration: 0.5, ease: "easeOut" }}
-            style={{
-              maxWidth: '80%',
-              textAlign: 'center',
-              padding: '2rem',
-              color: 'white',
-              fontSize: '2rem',
-              fontFamily: '"Barriecito", cursive',
-              lineHeight: '1.4',
-              textShadow: '2px 2px 4px rgba(0,0,0,0.8)'
-            }}
-          >
-            <span style={{ display: 'inline-block', minHeight: '1.4em' }}>
-              {typedText}
-              {typedText && typedText.length < currentOption.content.length && (
-                <span style={{ 
-                  opacity: 0.7, 
-                  animation: 'blink 1s infinite',
-                  marginLeft: '2px'
-                }}>
-                  |
-                </span>
-              )}
-            </span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-      
-      {/* Loading message for roast preparation */}
-      {username && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.7 }}
-          style={{
-            position: 'absolute',
-            bottom: '10%',
-            fontSize: '1rem',
-            color: '#aaaaaa',
-            fontFamily: '"Barriecito", cursive',
-            textAlign: 'center',
-          }}
-        >
-          
-        </motion.div>
-      )}
+      {/* RoastSound runs in background - visual elements hidden but variables used */}
+      <div style={{ display: 'none' }}>
+        {currentOption?.content} {typedText} {currentCue} {showText ? 'shown' : 'hidden'}
+      </div>
       
       <style>{`
         @keyframes blink {
@@ -420,4 +425,4 @@ const Fillers = ({ onComplete, username }: FillersProps) => {
   );
 };
 
-export default Fillers;
+export default RoastSound;

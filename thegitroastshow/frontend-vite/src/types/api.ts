@@ -44,7 +44,7 @@ export interface GitHubEvent {
   type: string;
   repo: string | null;
   created_at: string;
-  payload: any;
+  payload: Record<string, unknown>;
 }
 
 export interface UserAnalysis {
@@ -198,7 +198,7 @@ export function convertRoastToItems(roastResponse: RoastResponse): RoastItem[] {
       effect: "crowd_laugh",
       cue: "*crowd laughs*",
       emoji: "😂",
-      file: "sounds/applause.mp3",
+      file: "sounds/crowdlaugh.mp3",
     },
     {
       effect: "rimshot",

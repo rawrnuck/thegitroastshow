@@ -55,12 +55,10 @@ const RoastScript = ({
   // Add a ref to control whether typing animation should be protected from cleanup
   const protectTypingRef = useRef<boolean>(false);
 
-  // Initialize TTS with improved configuration
+  // Initialize TTS with ElevenLabs only
   const [ttsState, ttsControls] = useTextToSpeech({
-    preferElevenLabs: true,
-    rate: 1.1,
-    pitch: 1.1, // Slightly higher pitch for better clarity
     volume: 1,
+    elevenLabsVoiceId: "2EiwWnXFnvU5JabPnv8n", // Rachel voice
   });
 
   // Load roast data from API
@@ -68,9 +66,8 @@ const RoastScript = ({
     const fetchRoastData = async () => {
       setIsLoading(true);
 
-      // Reset TTS engine at the start of each new roast to ensure consistent voice
-      console.log("Resetting TTS engine at the beginning of new roast session");
-      ttsControls.resetTTSEngine();
+      // Since we only use ElevenLabs now, no need to reset TTS engine
+      console.log("Starting new roast session with ElevenLabs TTS");
 
       // If we have prefetched data, use it instead of fetching again
       if (prefetchedRoastData && prefetchedRoastData.length > 0) {
@@ -297,12 +294,10 @@ const RoastScript = ({
     []
   );
 
-  // Improved typing animation with dynamic speeds
+  // Improved typing animation optimized for ElevenLabs TTS sync
   const startTypingAnimation = useCallback(
     (text: string, duration: number): Promise<void> => {
       return new Promise((resolve) => {
-        // Remove cleanup() call here to avoid canceling speech
-
         console.log("startTypingAnimation called with:", { text, duration });
         setTypedText("");
 
@@ -314,9 +309,8 @@ const RoastScript = ({
 
         const totalChars = text.length;
 
-        // For simultaneous TTS and typing, adjust the speeds
-        // Make the typing a bit faster so it generally completes before or with the TTS
-        const baseDelay = Math.max(30, duration / (totalChars * 1.2));
+        // Optimize typing speed for ElevenLabs - make it slightly faster to sync better
+        const baseDelay = Math.max(25, duration / (totalChars * 1.4));
 
         console.log("Typing animation settings:", {
           totalChars,
@@ -333,27 +327,26 @@ const RoastScript = ({
             currentIndex++;
 
             if (currentIndex <= totalChars) {
-              // Calculate dynamic delay based on character
+              // Calculate dynamic delay with natural variation
               let charDelay = baseDelay;
 
-              // Special punctuation timing - shorter pauses for simultaneous TTS
               const nextChar = text[currentIndex - 1];
               if ([".", "!", "?"].includes(nextChar)) {
-                charDelay = baseDelay * 2; // Slightly longer pause at sentence endings
+                charDelay = baseDelay * 2.5; // Pause at sentence endings
               } else if ([",", ";", ":"].includes(nextChar)) {
-                charDelay = baseDelay * 1.5; // Slight pause at punctuation
+                charDelay = baseDelay * 1.8; // Pause at punctuation
               } else if (nextChar === " ") {
-                charDelay = baseDelay * 1.2; // Very slight pause at spaces
+                charDelay = baseDelay * 1.3; // Slight pause at spaces
               } else {
-                // Add some natural variation (+/- 20%)
-                const variation = baseDelay * 0.4 * (Math.random() - 0.5);
+                // Add natural typing variation (+/- 30%)
+                const variation = baseDelay * 0.6 * (Math.random() - 0.5);
                 charDelay = baseDelay + variation;
               }
 
               typingIntervalRef.current = setTimeout(typeChar, charDelay);
             } else {
               console.log("Typing animation complete");
-              setTimeout(resolve, 200); // Short delay after completion
+              setTimeout(resolve, 150); // Brief delay after completion
             }
           }
         };
@@ -365,13 +358,18 @@ const RoastScript = ({
     []
   );
 
-  // Function to play TTS speech with improved event handling
+  // Function to play TTS speech with improved event handling for ElevenLabs
   const playTTS = useCallback(
     (text: string): Promise<void> => {
       return new Promise((resolve) => {
         if (!ttsEnabled) {
-          // If TTS is disabled, resolve immediately
           console.log("TTS is disabled, skipping speech");
+          resolve();
+          return;
+        }
+
+        if (!ttsState.elevenLabsAvailable) {
+          console.warn("ElevenLabs TTS service is not available");
           resolve();
           return;
         }
@@ -388,7 +386,6 @@ const RoastScript = ({
           document.removeEventListener("tts-ended", speechEndListener);
           document.removeEventListener("tts-error", speechEndListener);
 
-          // No artificial delay when running simultaneously with typing
           resolve();
         };
 
@@ -398,32 +395,31 @@ const RoastScript = ({
         document.addEventListener("tts-ended", speechEndListener);
         document.addEventListener("tts-error", speechEndListener);
 
-        // Start TTS immediately for simultaneous operation with typing
+        // Start TTS
         console.log(
-          "Starting TTS for:",
+          "Starting ElevenLabs TTS for:",
           personalizedText.substring(0, 50) + "..."
         );
         ttsControls.speak(personalizedText);
 
-        // Fallback timeout in case TTS doesn't fire events properly
-        // Adjust based on text length with a longer duration to ensure it completes
+        // Fallback timeout based on text length (ElevenLabs is generally faster than WebSpeech)
         const estimatedDuration = Math.max(
-          6000,
-          (personalizedText.length / 8) * 1000
+          4000,
+          (personalizedText.length / 12) * 1000 // Faster rate for ElevenLabs
         );
         setTimeout(() => {
           if (!speechEnded) {
             console.warn(
-              "TTS fallback timeout triggered after",
-              estimatedDuration + 2000,
+              "ElevenLabs TTS fallback timeout triggered after",
+              estimatedDuration + 1000,
               "ms"
             );
             onSpeechEnd();
           }
-        }, estimatedDuration + 2000);
+        }, estimatedDuration + 1000);
       });
     },
-    [username, ttsControls, ttsEnabled]
+    [username, ttsControls, ttsEnabled, ttsState.elevenLabsAvailable]
   );
 
   // Main sequence controller
@@ -500,145 +496,125 @@ const RoastScript = ({
         console.log("Starting speech item:", speechItem.text);
 
         // Show text immediately
-        console.log("Setting showText to true and resetting typedText");
         setShowText(true);
-        setTypedText(""); // Reset typed text
+        setTypedText("");
 
-        // Force a small delay to ensure state updates
+        // Small delay to ensure state updates
         await new Promise((resolve) => setTimeout(resolve, 100));
 
         // Prepare the text to show
         const textToShow = speechItem.text.replace(/\[username\]/g, username);
-        // Adjust typing duration based on text length
+
+        // Optimized typing duration for ElevenLabs - faster for better sync
         const typingDuration = Math.max(
-          3000,
-          Math.min(8000, textToShow.length * 60)
+          2500,
+          Math.min(6000, textToShow.length * 45) // Faster baseline for ElevenLabs
         );
 
         console.log(
-          "Starting typing animation and TTS simultaneously for:",
-          textToShow
+          "Starting ElevenLabs TTS and typing animation:",
+          textToShow.substring(0, 50) + "..."
         );
 
         // Enable protection for typing animation
         protectTypingRef.current = true;
 
         try {
-          // Start TTS a bit earlier if enabled
-          let ttsPromise = Promise.resolve();
+          // Start both TTS and typing simultaneously for better sync
+          const promises: Promise<void>[] = [];
+
+          // Start typing animation
+          promises.push(startTypingAnimation(textToShow, typingDuration));
+
+          // Start TTS if enabled
           if (soundEnabled && ttsEnabled) {
-            console.log("Starting TTS alongside typing animation");
-            // Small delay to let typing begin first, but still feel synchronized
-            setTimeout(() => {
-              ttsPromise = playTTS(speechItem.text).catch((error) => {
-                console.warn("TTS failed during typing:", error);
-                return Promise.resolve(); // Continue even if TTS fails
-              });
-            }, 300);
+            // Start TTS with a tiny delay to let typing begin first
+            const ttsPromise = new Promise<void>((resolve) => {
+              setTimeout(() => {
+                playTTS(speechItem.text)
+                  .catch((error) => {
+                    console.warn("ElevenLabs TTS failed:", error);
+                  })
+                  .finally(() => resolve());
+              }, 200);
+            });
+            promises.push(ttsPromise);
           }
 
-          // Start typing animation - don't await, just get the promise
-          const typingPromise = startTypingAnimation(
-            textToShow,
-            typingDuration
+          // Add minimum display time promise
+          promises.push(
+            new Promise((resolve) =>
+              setTimeout(resolve, Math.max(2000, typingDuration * 0.8))
+            )
           );
 
-          // Wait for both to complete
-          await Promise.all([
-            typingPromise,
-            // Additional promise to ensure minimum display time even if TTS ends early
-            new Promise((resolve) =>
-              setTimeout(resolve, Math.max(2000, typingDuration * 0.7))
-            ),
-          ]);
+          // Wait for all to complete
+          await Promise.all(promises);
 
-          // If TTS is still ongoing, give it some time to finish
-          await Promise.race([
-            ttsPromise,
-            new Promise((resolve) => setTimeout(resolve, 2000)),
-          ]);
-
-          // Get the next sound item if available, to play before text disappears
+          // Get the next sound item if available
           let nextSoundItem: SoundItem | null = null;
-
           if (
             currentItemIndex + 1 < roastData.length &&
             roastData[currentItemIndex + 1].type === "sound"
           ) {
             nextSoundItem = roastData[currentItemIndex + 1] as SoundItem;
 
-            // Show cue for next sound before text disappears
+            // Show cue and play sound
             if (nextSoundItem.cue) {
-              console.log(
-                "Showing sound cue before text disappears:",
-                nextSoundItem.cue
-              );
+              console.log("Showing next sound cue:", nextSoundItem.cue);
               setCurrentCue(nextSoundItem.cue);
             }
 
-            // Play the sound if enabled
             if (soundEnabled && nextSoundItem.file) {
               try {
-                // Play sound but don't wait for it to complete - let it overlap with text fade
-                // Use duringText=true to indicate this sound is playing during text display
                 playSound(nextSoundItem.file, true).catch((error) => {
-                  console.warn(
-                    "Sound playback failed during transition:",
-                    error
-                  );
+                  console.warn("Sound playback failed:", error);
                 });
               } catch (error) {
-                console.warn("Error starting sound during transition:", error);
+                console.warn("Error starting sound:", error);
               }
             }
 
             // Keep text visible during sound effect
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            await new Promise((resolve) => setTimeout(resolve, 1200));
           }
         } catch (error) {
-          console.warn("Error during typing or TTS:", error);
+          console.warn("Error during speech processing:", error);
         } finally {
-          // Always ensure protection is disabled when we're done
           protectTypingRef.current = false;
         }
 
-        // Keep text visible for a moment based on text length
+        // Keep text visible for a moment
         const visibilityDuration = Math.max(
           1000,
-          Math.min(2000, textToShow.length * 15)
+          Math.min(1500, textToShow.length * 12)
         );
         await new Promise((resolve) => setTimeout(resolve, visibilityDuration));
 
         // Hide text
         setShowText(false);
 
-        // If we played a sound cue for the next item, skip that item
+        // Skip next item if it was a sound we already played
         const skipNextItem =
           currentItemIndex + 1 < roastData.length &&
           roastData[currentItemIndex + 1].type === "sound";
 
-        // Wait before moving to next item
         setTimeout(() => {
           console.log(
-            "Moving to next item from",
-            currentItemIndex,
-            "to",
+            "Moving to next item:",
             skipNextItem ? currentItemIndex + 2 : currentItemIndex + 1
           );
 
-          // Skip the next item if it was a sound we already played
           if (skipNextItem) {
             setCurrentItemIndex((prev) => prev + 2);
           } else {
             setCurrentItemIndex((prev) => prev + 1);
           }
 
-          // Clear any lingering cues
           setCurrentCue("");
           setIsProcessing(false);
-        }, 500);
+        }, 400);
 
-        // Return early since we've handled the next item logic already
         return;
       }
 
@@ -747,7 +723,7 @@ const RoastScript = ({
             alignItems: "center",
             color: !ttsEnabled
               ? "#ff4444"
-              : ttsState.usingElevenLabs
+              : ttsState.elevenLabsAvailable
               ? "#00ff00"
               : "#ffaa00",
             fontSize: "0.9rem",
@@ -764,7 +740,7 @@ const RoastScript = ({
               borderRadius: "50%",
               backgroundColor: !ttsEnabled
                 ? "#ff4444"
-                : ttsState.usingElevenLabs
+                : ttsState.elevenLabsAvailable
                 ? "#00ff00"
                 : "#ffaa00",
               marginRight: "0.5rem",
@@ -773,9 +749,9 @@ const RoastScript = ({
           />
           {!ttsEnabled
             ? "🔇 TTS Disabled"
-            : ttsState.usingElevenLabs
+            : ttsState.elevenLabsAvailable
             ? "🎙️ ElevenLabs"
-            : "🔊 Browser TTS"}
+            : "⚠️ ElevenLabs Unavailable"}
         </motion.div>
       )}
 

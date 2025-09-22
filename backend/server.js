@@ -7,6 +7,7 @@ require("dotenv").config();
 const roastRoutes = require("./src/routes/roast");
 const userRoutes = require("./src/routes/user");
 const healthRoutes = require("./src/routes/health");
+const ttsRoutes = require("./src/routes/tts");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -36,26 +37,38 @@ const rateLimiterMiddleware = async (req, res, next) => {
 app.use(helmet());
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? ["https://your-frontend-domain.com"]
-        : [
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://localhost:5173",
-            "http://localhost:5174",
-          ],
+    origin: [
+      // Production domains
+      "https://thegitroastshow.vercel.app",
+      "https://thegitroastshow-git-*-rawrnuck.vercel.app",
+      "https://*.vercel.app",
+      // Development domains - always allow for testing
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:3000",
+    ],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   })
 );
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 app.use(rateLimiterMiddleware);
 
+// Handle preflight requests
+app.options("*", cors(), (req, res) => {
+  res.sendStatus(200);
+});
+
 // Routes
 app.use("/api/health", healthRoutes);
 app.use("/api/roast", roastRoutes);
 app.use("/api/user", userRoutes);
+app.use("/api/tts", ttsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

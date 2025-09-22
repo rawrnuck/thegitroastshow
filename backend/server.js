@@ -7,7 +7,7 @@ require("dotenv").config();
 const roastRoutes = require("./src/routes/roast");
 const userRoutes = require("./src/routes/user");
 const healthRoutes = require("./src/routes/health");
-const ttsRoutes = require("./src/routes/tts");
+// const ttsRoutes = require("./src/routes/tts");
 
 const app = express();
 const PORT = process.env.PORT || 3000;

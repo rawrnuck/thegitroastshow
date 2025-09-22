@@ -1,22 +1,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
 interface TextToSpeechOptions {
-  rate?: number;
-  pitch?: number;
   volume?: number;
-  voice?: SpeechSynthesisVoice | null;
-  preferElevenLabs?: boolean;
   elevenLabsVoiceId?: string;
 }
 
 export interface TextToSpeechState {
   speaking: boolean;
   paused: boolean;
-  voices: SpeechSynthesisVoice[];
   options: TextToSpeechOptions;
-  usingElevenLabs: boolean;
   elevenLabsAvailable: boolean;
-  sessionTTSEngine: "elevenlabs" | "webspeech" | null; // Track which TTS engine is used for this session
 }
 
 export interface TextToSpeechControls {
@@ -24,43 +17,28 @@ export interface TextToSpeechControls {
   pause: () => void;
   resume: () => void;
   cancel: () => void;
-  setVoice: (voice: SpeechSynthesisVoice) => void;
-  setRate: (rate: number) => void;
-  setPitch: (pitch: number) => void;
   setVolume: (volume: number) => void;
-  setPreferElevenLabs: (prefer: boolean) => void;
-  resetTTSEngine: () => void; // Add function to reset TTS engine for new roast session
+  setElevenLabsVoiceId: (voiceId: string) => void;
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
 /**
- * Custom hook for text-to-speech functionality with ElevenLabs and Web Speech API fallback
+ * Custom hook for text-to-speech functionality using ElevenLabs only
  */
 export const useTextToSpeech = (
   defaultOptions?: TextToSpeechOptions
 ): [TextToSpeechState, TextToSpeechControls] => {
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [usingElevenLabs, setUsingElevenLabs] = useState(false);
   const [elevenLabsAvailable, setElevenLabsAvailable] = useState(false);
-  // Track which TTS engine is being used for the entire roast session
-  const [sessionTTSEngine, setSessionTTSEngine] = useState<
-    "elevenlabs" | "webspeech" | null
-  >(null);
   const [options, setOptions] = useState<TextToSpeechOptions>({
-    rate: defaultOptions?.rate || 1,
-    pitch: defaultOptions?.pitch || 1,
     volume: defaultOptions?.volume || 1,
-    voice: defaultOptions?.voice || null,
-    preferElevenLabs: defaultOptions?.preferElevenLabs ?? true,
     elevenLabsVoiceId:
       defaultOptions?.elevenLabsVoiceId || "2EiwWnXFnvU5JabPnv8n", // Rachel
   });
 
-  // References for controlling playback
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  // Reference for controlling audio playback
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   // Check ElevenLabs availability on mount
@@ -97,46 +75,12 @@ export const useTextToSpeech = (
     checkElevenLabsStatus();
   }, []);
 
-  // Initialize voices for Web Speech API fallback
-  useEffect(() => {
-    const getVoices = () => {
-      const availableVoices = window.speechSynthesis?.getVoices() || [];
-      setVoices(availableVoices);
-
-      // Set default voice if available and not already set
-      if (availableVoices.length > 0 && !options.voice) {
-        // Prefer a human-sounding English voice if available
-        const preferredVoice =
-          availableVoices.find(
-            (voice) =>
-              voice.lang.startsWith("en") && !voice.name.includes("Google")
-          ) || availableVoices[0];
-
-        setOptions((prev) => ({ ...prev, voice: preferredVoice }));
-      }
-    };
-
-    // Get voices immediately in case they're already loaded
-    getVoices();
-
-    // Also listen for voiceschanged event
-    window.speechSynthesis?.addEventListener("voiceschanged", getVoices);
-
-    return () => {
-      window.speechSynthesis?.removeEventListener("voiceschanged", getVoices);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   // Clean up any speaking on unmount
   useEffect(() => {
     return () => {
-      if (speaking) {
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current = null;
-        }
-        window.speechSynthesis?.cancel();
+      if (speaking && audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
       }
     };
   }, [speaking]);
@@ -173,18 +117,11 @@ export const useTextToSpeech = (
     document.dispatchEvent(new CustomEvent(eventName));
   }, []);
 
-  // ElevenLabs TTS function with improved error handling and caching
+  // ElevenLabs TTS function
   const speakWithElevenLabs = useCallback(
-    async (text: string) => {
+    async (text: string): Promise<boolean> => {
       try {
-        // If text is already empty/cleaned, don't clean again
-        const cleanText =
-          typeof text === "string" && text.trim()
-            ? text.startsWith("*") || text.includes("(")
-              ? cleanTextForSpeech(text)
-              : text
-            : text;
-
+        const cleanText = cleanTextForSpeech(text);
         if (!cleanText) return false;
 
         // Generate a cache key based on the text and voice
@@ -203,24 +140,20 @@ export const useTextToSpeech = (
 
           return new Promise<boolean>((resolve) => {
             audio.onloadstart = () => setSpeaking(true);
-            audio.onplay = () => {
-              setSpeaking(true);
-              setUsingElevenLabs(true);
-            };
+            audio.onplay = () => setSpeaking(true);
             audio.onpause = () => setPaused(true);
             audio.onplaying = () => setPaused(false);
             audio.onended = () => {
               setSpeaking(false);
               setPaused(false);
-              setUsingElevenLabs(false);
               audioRef.current = null;
+              dispatchSpeechEvent("tts-ended");
               resolve(true);
             };
             audio.onerror = () => {
               console.error("Audio playback error from cache");
               setSpeaking(false);
               setPaused(false);
-              setUsingElevenLabs(false);
               audioRef.current = null;
               audioCache.current.delete(cacheKey); // Remove bad cache entry
               resolve(false);
@@ -318,7 +251,6 @@ export const useTextToSpeech = (
           };
           audio.onplay = () => {
             setSpeaking(true);
-            setUsingElevenLabs(true);
             hasStarted = true;
             dispatchSpeechEvent("tts-started");
           };
@@ -327,7 +259,6 @@ export const useTextToSpeech = (
           audio.onended = () => {
             setSpeaking(false);
             setPaused(false);
-            setUsingElevenLabs(false);
             audioRef.current = null;
             dispatchSpeechEvent("tts-ended");
             resolve(true);
@@ -336,10 +267,7 @@ export const useTextToSpeech = (
             console.error("Audio playback error:", error);
             setSpeaking(false);
             setPaused(false);
-            setUsingElevenLabs(false);
             audioRef.current = null;
-
-            // Don't revoke URL as we've cached it
             resolve(false);
           };
 
@@ -389,227 +317,7 @@ export const useTextToSpeech = (
     [options.elevenLabsVoiceId, cleanTextForSpeech, dispatchSpeechEvent]
   );
 
-  // Web Speech API fallback function with improved reliability
-  const speakWithWebAPI = useCallback(
-    (text: string) => {
-      if (!window.speechSynthesis) {
-        console.error("Web Speech API not supported");
-        return;
-      }
-
-      // If text is already empty/cleaned, don't clean again
-      const cleanText =
-        typeof text === "string" && text.trim()
-          ? text.startsWith("*") || text.includes("(")
-            ? cleanTextForSpeech(text)
-            : text
-          : text;
-
-      if (!cleanText) return;
-
-      console.log(
-        "Using Web Speech API for:",
-        cleanText.substring(0, 50) + "..."
-      );
-
-      // Cancel any ongoing speech and reset state
-      window.speechSynthesis.cancel();
-
-      // Firefox sometimes keeps the speaking flag stuck after cancel
-      setTimeout(() => {
-        // Create utterance
-        const utterance = new SpeechSynthesisUtterance(cleanText);
-
-        // Find an appropriate voice - prioritize natural sounding English voices
-        if (!options.voice || !options.voice.lang.startsWith("en")) {
-          const availableVoices = window.speechSynthesis.getVoices();
-          const preferredVoice = availableVoices.find(
-            (v) =>
-              v.lang.startsWith("en") &&
-              (v.name.includes("Natural") || !v.name.includes("Google")) // Prefer non-Google voices if available
-          );
-
-          if (preferredVoice) {
-            utterance.voice = preferredVoice;
-          }
-        } else {
-          utterance.voice = options.voice;
-        }
-
-        // Apply options with sensible defaults for roasting
-        utterance.rate = options.rate ?? 0.9; // Slightly slower rate for dramatic effect
-        utterance.pitch = options.pitch ?? 1.1; // Slightly higher pitch for energetic delivery
-        utterance.volume = options.volume ?? 1.0;
-
-        // Use robust event handling
-        const setupUtterance = () => {
-          utterance.onstart = () => {
-            setSpeaking(true);
-            setUsingElevenLabs(false);
-            setPaused(false);
-            dispatchSpeechEvent("tts-started");
-          };
-          utterance.onpause = () => setPaused(true);
-          utterance.onresume = () => setPaused(false);
-          utterance.onend = () => {
-            setSpeaking(false);
-            setPaused(false);
-            utteranceRef.current = null;
-            dispatchSpeechEvent("tts-ended");
-          };
-          utterance.onerror = (event) => {
-            console.error("Speech synthesis error:", event);
-            setSpeaking(false);
-            setPaused(false);
-            utteranceRef.current = null;
-
-            // Retry with a simpler approach if we get an interrupted error
-            if (event.error === "interrupted" || event.error === "canceled") {
-              console.log("Attempting speech recovery after interruption");
-              // Small delay before retry
-              setTimeout(() => {
-                try {
-                  window.speechSynthesis.cancel(); // Make sure we're clean
-                  const simpleUtterance = new SpeechSynthesisUtterance(
-                    cleanText
-                  );
-                  // Use simpler settings for the retry
-                  window.speechSynthesis.speak(simpleUtterance);
-                } catch (e) {
-                  console.error("Recovery attempt failed", e);
-                }
-              }, 500);
-            }
-          };
-        };
-
-        setupUtterance();
-
-        // Save reference
-        utteranceRef.current = utterance;
-
-        // Chrome/Edge bug workaround - sometimes utterances are cut short
-        const maxSpeechLength = 140; // Characters
-        if (cleanText.length > maxSpeechLength) {
-          // Split into chunks with pauses between
-          const chunks: string[] = [];
-          let start = 0;
-
-          // Find natural break points (sentences)
-          const sentences = cleanText.match(/[^.!?]+[.!?]+/g) || [];
-
-          if (sentences.length > 1) {
-            // Use sentence boundaries
-            sentences.forEach((sentence) => {
-              chunks.push(sentence.trim());
-            });
-          } else {
-            // No clear sentences, split by length with consideration for words
-            while (start < cleanText.length) {
-              let end = Math.min(start + maxSpeechLength, cleanText.length);
-
-              // Don't break in the middle of a word if not at the end
-              if (end < cleanText.length) {
-                while (
-                  end > start &&
-                  cleanText[end] !== " " &&
-                  cleanText[end] !== "." &&
-                  cleanText[end] !== "!" &&
-                  cleanText[end] !== "?"
-                ) {
-                  end--;
-                }
-              }
-
-              chunks.push(cleanText.substring(start, end).trim());
-              start = end;
-            }
-          }
-
-          // Speak the first chunk
-          utterance.text = chunks[0];
-          window.speechSynthesis.speak(utterance);
-
-          // Queue the rest with slight delays between
-          if (chunks.length > 1) {
-            let chunkIndex = 1;
-
-            utterance.onend = () => {
-              if (chunkIndex < chunks.length) {
-                const nextUtterance = new SpeechSynthesisUtterance(
-                  chunks[chunkIndex]
-                );
-                // Copy voice and rate settings
-                nextUtterance.voice = utterance.voice;
-                nextUtterance.rate = utterance.rate;
-                nextUtterance.pitch = utterance.pitch;
-                nextUtterance.volume = utterance.volume;
-
-                // For all chunks except the last
-                if (chunkIndex < chunks.length - 1) {
-                  nextUtterance.onend = utterance.onend;
-                } else {
-                  // Last chunk gets the final onend handler
-                  nextUtterance.onend = () => {
-                    setSpeaking(false);
-                    setPaused(false);
-                    utteranceRef.current = null;
-                    dispatchSpeechEvent("tts-ended");
-                  };
-                }
-
-                // Update for next iteration
-                utteranceRef.current = nextUtterance;
-                chunkIndex++;
-
-                // Small pause between chunks
-                setTimeout(() => {
-                  window.speechSynthesis.speak(nextUtterance);
-                }, 150);
-              } else {
-                // All chunks spoken
-                setSpeaking(false);
-                setPaused(false);
-                utteranceRef.current = null;
-              }
-            };
-          }
-        } else {
-          // Short text, speak directly
-          window.speechSynthesis.speak(utterance);
-        }
-
-        // Chrome/Edge bug workaround to prevent cutting off
-        const intervalId = setInterval(() => {
-          if (!window.speechSynthesis.speaking) {
-            clearInterval(intervalId);
-          } else {
-            window.speechSynthesis.pause();
-            window.speechSynthesis.resume();
-          }
-        }, 10000);
-      }, 100); // Small delay to ensure cancel takes effect
-    },
-    [options, cleanTextForSpeech, dispatchSpeechEvent]
-  );
-
-  // Track network connection status
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-
-  useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-
-    return () => {
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
-
-  // Main speak function that uses one TTS engine consistently throughout a roast session
+  // Main speak function
   const speak = useCallback(
     async (text: string) => {
       if (!text) return;
@@ -620,104 +328,22 @@ export const useTextToSpeech = (
       // Dispatch event to notify that speech is starting
       dispatchSpeechEvent("tts-starting");
 
-      // Clean the text once here to be used for all TTS attempts
-      const cleanText = cleanTextForSpeech(text);
-      if (!cleanText) {
+      if (!elevenLabsAvailable) {
+        console.warn("ElevenLabs TTS service is not available");
         dispatchSpeechEvent("tts-error");
         return;
       }
 
-      // First speech in the roast session - decide which TTS to use for entire session
-      if (sessionTTSEngine === null) {
-        // Make decision based on availability
-        if (isOnline && options.preferElevenLabs && elevenLabsAvailable) {
-          // Try ElevenLabs first
-          try {
-            console.log("Starting roast with ElevenLabs TTS");
+      const success = await speakWithElevenLabs(text);
 
-            // Use a longer timeout for the initial TTS decision
-            const timeoutPromise = new Promise<boolean>((resolve) => {
-              setTimeout(() => {
-                console.log("ElevenLabs TTS initial attempt timeout triggered");
-                resolve(false);
-              }, 5000); // Longer timeout for initial session selection
-            });
-
-            // Race between the actual TTS request and the timeout
-            const success = await Promise.race([
-              speakWithElevenLabs(cleanText),
-              timeoutPromise,
-            ]);
-
-            if (success) {
-              console.log(
-                "ElevenLabs TTS successful - will use for entire roast session"
-              );
-              setSessionTTSEngine("elevenlabs");
-              return;
-            }
-
-            console.log(
-              "ElevenLabs failed, using Web Speech API for entire session"
-            );
-            setSessionTTSEngine("webspeech");
-            speakWithWebAPI(cleanText);
-            return;
-          } catch (error) {
-            console.warn(
-              "Error with ElevenLabs, using Web Speech API for session:",
-              error
-            );
-            setSessionTTSEngine("webspeech");
-            speakWithWebAPI(cleanText);
-            return;
-          }
-        } else {
-          // Use Web Speech directly for entire session
-          console.log("Starting roast with Web Speech API");
-          setSessionTTSEngine("webspeech");
-          speakWithWebAPI(cleanText);
-          return;
-        }
-      }
-
-      // For all subsequent speeches in this session, use the established session TTS engine
-      if (sessionTTSEngine === "elevenlabs") {
-        console.log(
-          "Using session TTS (ElevenLabs) for:",
-          cleanText.substring(0, 50) + "..."
-        );
-        const success = await speakWithElevenLabs(cleanText);
-
-        // If ElevenLabs fails mid-session, log error but don't change engines to maintain voice consistency
-        if (!success) {
-          console.error(
-            "ElevenLabs failed mid-roast, but maintaining consistency"
-          );
-          dispatchSpeechEvent("tts-error");
-          setSpeaking(false);
-          setPaused(false);
-        }
-      } else {
-        // Use Web Speech API for entire session
-        console.log(
-          "Using session TTS (Web Speech API) for:",
-          cleanText.substring(0, 50) + "..."
-        );
-        speakWithWebAPI(cleanText);
+      if (!success) {
+        console.error("ElevenLabs TTS failed");
+        dispatchSpeechEvent("tts-error");
+        setSpeaking(false);
+        setPaused(false);
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [
-      sessionTTSEngine,
-      isOnline,
-      options.preferElevenLabs,
-      elevenLabsAvailable,
-      speakWithElevenLabs,
-      speakWithWebAPI,
-      cleanTextForSpeech,
-      dispatchSpeechEvent,
-    ]
+    [elevenLabsAvailable, speakWithElevenLabs, dispatchSpeechEvent]
   );
 
   // Pause function
@@ -725,22 +351,16 @@ export const useTextToSpeech = (
     if (audioRef.current && !audioRef.current.paused) {
       audioRef.current.pause();
       setPaused(true);
-    } else if (speaking && !paused && window.speechSynthesis) {
-      window.speechSynthesis.pause();
-      setPaused(true);
     }
-  }, [speaking, paused]);
+  }, []);
 
   // Resume function
   const resume = useCallback(() => {
     if (audioRef.current && audioRef.current.paused) {
       audioRef.current.play();
       setPaused(false);
-    } else if (speaking && paused && window.speechSynthesis) {
-      window.speechSynthesis.resume();
-      setPaused(false);
     }
-  }, [speaking, paused]);
+  }, []);
 
   // Cancel function
   const cancel = useCallback(() => {
@@ -750,13 +370,8 @@ export const useTextToSpeech = (
       audioRef.current.pause();
       audioRef.current = null;
     }
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
     setSpeaking(false);
     setPaused(false);
-    setUsingElevenLabs(false);
-    utteranceRef.current = null;
 
     // If we were speaking and now cancelling, dispatch the ended event
     if (wasSpeaking) {
@@ -765,40 +380,19 @@ export const useTextToSpeech = (
   }, [speaking, dispatchSpeechEvent]);
 
   // Option setter functions
-  const setVoice = useCallback((voice: SpeechSynthesisVoice) => {
-    setOptions((prev) => ({ ...prev, voice }));
-  }, []);
-
-  const setRate = useCallback((rate: number) => {
-    setOptions((prev) => ({ ...prev, rate }));
-  }, []);
-
-  const setPitch = useCallback((pitch: number) => {
-    setOptions((prev) => ({ ...prev, pitch }));
-  }, []);
-
   const setVolume = useCallback((volume: number) => {
     setOptions((prev) => ({ ...prev, volume }));
   }, []);
 
-  const setPreferElevenLabs = useCallback((prefer: boolean) => {
-    setOptions((prev) => ({ ...prev, preferElevenLabs: prefer }));
-  }, []);
-
-  // Add resetTTSEngine function to reset the session TTS engine for a new roast
-  const resetTTSEngine = useCallback(() => {
-    console.log("Resetting TTS engine for new roast session");
-    setSessionTTSEngine(null);
+  const setElevenLabsVoiceId = useCallback((elevenLabsVoiceId: string) => {
+    setOptions((prev) => ({ ...prev, elevenLabsVoiceId }));
   }, []);
 
   const state: TextToSpeechState = {
     speaking,
     paused,
-    voices,
     options,
-    usingElevenLabs,
     elevenLabsAvailable,
-    sessionTTSEngine, // Include the session TTS engine in state
   };
 
   const controls: TextToSpeechControls = {
@@ -806,12 +400,8 @@ export const useTextToSpeech = (
     pause,
     resume,
     cancel,
-    setVoice,
-    setRate,
-    setPitch,
     setVolume,
-    setPreferElevenLabs,
-    resetTTSEngine, // Add the reset function to controls
+    setElevenLabsVoiceId,
   };
 
   return [state, controls];

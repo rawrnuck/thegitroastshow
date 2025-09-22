@@ -1,0 +1,81 @@
+{
+  "audio_roast_collection": {
+    "title": "roast fillers",
+    "description": "fillers for roast sessions",
+    "total_files": 12,
+    "audio_files": [
+      {
+        "id": 1,
+        "filename": "eleven.wav",
+        "order": 1,
+        "content": "Ladies and gentlemen, a wild username appears."
+      },
+      {
+        "id": 2,
+        "filename": "ten.wav",
+        "order": 2,
+        "content": "Do you even know what's inside your own repos? Yeah, we do."
+      },
+      {
+        "id": 3,
+        "filename": "nine.wav",
+        "order": 3,
+        "content": "Buckle up. It's not just commits getting pushed around today."
+      },
+      {
+        "id": 4,
+        "filename": "eight.wav",
+        "order": 4,
+        "content": "This roast will be faster than your internet and harsher than your code reviews."
+      },
+      {
+        "id": 5,
+        "filename": "twelve.wav",
+        "order": 5,
+        "content": "Get ready, because even your forks are going to feel this burn."
+      },
+      {
+        "id": 6,
+        "filename": "seven.wav",
+        "order": 3,
+        "content": "You ready? No, you're not. Nobody ever is."
+      },
+      {
+        "id": 7,
+        "filename": "six.wav",
+        "order": 2,
+        "content": "Hope you didn't expect us to clap for your profile picture."
+      },
+      {
+        "id": 8,
+        "filename": "five.wav",
+        "order": 1,
+        "content": "So, you typed in your username. Brave move."
+      },
+      {
+        "id": 9,
+        "filename": "four.wav",
+        "order": 6,
+        "content": "You might want to keep a bucket of ice nearby."
+      },
+      {
+        "id": 10,
+        "filename": "three.wav",
+        "order": 5,
+        "content": "Sit tight, this is about to hurt more than a merge conflict."
+      },
+      {
+        "id": 11,
+        "filename": "two.wav",
+        "order": 2,
+        "content": "Don't worry, your secret repo full of half-baked projects is safe, for now."
+      },
+      {
+        "id": 12,
+        "filename": "one.wav",
+        "order": 1,
+        "content": "Oh, look who showed up, another hero with a GitHub account."
+      }
+    ]
+  }
+}

@@ -37,19 +37,19 @@ const rateLimiterMiddleware = async (req, res, next) => {
 app.use(helmet());
 app.use(
   cors({
-    origin:
-      process.env.NODE_ENV === "production"
-        ? [
-            "https://thegitroastshow.vercel.app",
-            "https://thegitroastshow-git-*-rawrnuck.vercel.app",
-            "https://*.vercel.app"
-          ]
-        : [
-            "http://localhost:3000",
-            "http://localhost:3001",
-            "http://localhost:5173",
-            "http://localhost:5174",
-          ],
+    origin: [
+      // Production domains
+      "https://thegitroastshow.vercel.app",
+      "https://thegitroastshow-git-*-rawrnuck.vercel.app",
+      "https://*.vercel.app",
+      // Development domains - always allow for testing
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:5173",
+      "http://localhost:5174",
+      "http://127.0.0.1:5173",
+      "http://127.0.0.1:3000",
+    ],
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
@@ -60,11 +60,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(rateLimiterMiddleware);
 
 // Handle preflight requests
-app.options("*", (req, res) => {
-  res.header("Access-Control-Allow-Origin", req.headers.origin);
-  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
-  res.header("Access-Control-Allow-Credentials", "true");
+app.options("*", cors(), (req, res) => {
   res.sendStatus(200);
 });
 

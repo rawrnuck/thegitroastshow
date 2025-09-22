@@ -68,7 +68,7 @@ app.options("*", cors(), (req, res) => {
 app.use("/api/health", healthRoutes);
 app.use("/api/roast", roastRoutes);
 app.use("/api/user", userRoutes);
-app.use("/api/tts", ttsRoutes);
+// app.use("/api/tts", ttsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

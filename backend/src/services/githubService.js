@@ -81,12 +81,74 @@ class GitHubService {
     return await this.makeRequest(`/users/${username}`);
   }
 
-  async getUserRepos(username, sort = "updated", per_page = 30) {
+  async getUserRepos(username) {
+    // We replace the simple page fetch with the complex fetching logic below
+    // in order to avoid breaking existing signatures if they are called elsewhere
     return await this.makeRequest(`/users/${username}/repos`, {
-      sort,
-      per_page,
+      sort: "updated",
+      per_page: 30,
       type: "public",
     });
+  }
+
+  async getRepoReadme(username, repo) {
+    return await this.makeRequest(`/repos/${username}/${repo}/readme`);
+  }
+
+  async getRepoBranches(username, repo) {
+    return await this.makeRequest(`/repos/${username}/${repo}/branches`);
+  }
+
+  async fetchEnhanceRepoNames(username) {
+    const names = new Set();
+    try {
+      // 15 most recently updated
+      const recent = await this.makeRequest(`/users/${username}/repos`, {
+        sort: "updated",
+        direction: "desc",
+        per_page: 15,
+      });
+      if (Array.isArray(recent)) recent.forEach((r) => names.add(r.name));
+
+      // 15 oldest created
+      const oldest = await this.makeRequest(`/users/${username}/repos`, {
+        sort: "created",
+        direction: "asc",
+        per_page: 15,
+      });
+      if (Array.isArray(oldest)) oldest.forEach((r) => names.add(r.name));
+    } catch (error) {
+       console.log("Error fetching enhanced repo names:", error.message);
+    }
+    return Array.from(names);
+  }
+
+  async fetchTargetRepos(username) {
+    let combined = {};
+    try {
+      // 3 most recently updated
+      const recent = await this.makeRequest(`/users/${username}/repos`, {
+        sort: "updated",
+        direction: "desc",
+        per_page: 3,
+      });
+      if (Array.isArray(recent)) {
+        recent.forEach((r) => { if (r.id) combined[r.id] = r; });
+      }
+
+      // 2 oldest created
+      const oldest = await this.makeRequest(`/users/${username}/repos`, {
+        sort: "created",
+        direction: "asc",
+        per_page: 2,
+      });
+      if (Array.isArray(oldest)) {
+        oldest.forEach((r) => { if (r.id) combined[r.id] = r; });
+      }
+    } catch (error) {
+       console.log("Error fetching target repos:", error.message);
+    }
+    return Object.values(combined);
   }
 
   async getRepoCommits(username, repo, per_page = 30) {
@@ -132,51 +194,93 @@ class GitHubService {
         updated_at: profile.updated_at,
       });
 
-      // Get repositories
-      console.log(`📁 Fetching repositories for: ${username}`);
-      const repos = await this.getUserRepos(username, "updated", 20);
-      console.log(`✅ Found ${repos.length} repositories`);
-      repos.slice(0, 5).forEach((repo, index) => {
-        console.log(
-          `   ${index + 1}. ${repo.name} - ⭐${repo.stargazers_count} - ${
-            repo.language || "No language"
-          }`
-        );
-      });
+      // Fetch Profile README from special repository (username/username)
+      let profileReadme = null;
+      try {
+        console.log(`📜 Fetching profile README for: ${username}`);
+        const readmeData = await this.getRepoReadme(username, username);
+        if (readmeData && readmeData.content) {
+            profileReadme = Buffer.from(readmeData.content, 'base64').toString('utf-8');
+            if (profileReadme.length > 2000) {
+                profileReadme = profileReadme.substring(0, 2000) + "...";
+            }
+        }
+      } catch (error) {
+        console.log(`   ⚠️  No profile README found for ${username}`);
+      }
 
-      // Get recent commits from top repositories
-      console.log(`💻 Fetching commits from top repositories...`);
+      // Get repositories logic based on test.py (15/15 and top 5 deep dive)
+      console.log(`📁 Fetching full repository names for: ${username}`);
+      const repoNames = await this.fetchEnhanceRepoNames(username);
+      console.log(`✅ Collected up to 30 repository names`);
+      
+      console.log(`📁 Fetching target repositories for deep analysis...`);
+      const targetRepos = await this.fetchTargetRepos(username);
+      console.log(`✅ Found ${targetRepos.length} target repositories to analyze deeply`);
+
       const repoCommits = [];
-      const topRepos = repos.slice(0, 5); // Analyze top 5 repos
+      const languageStats = {};
+      const deepRepos = [];
 
-      for (const repo of topRepos) {
+      for (const repo of targetRepos) {
         try {
-          console.log(`   📝 Getting commits from: ${repo.name}`);
-          const commits = await this.getRepoCommits(username, repo.name, 10);
+          console.log(`   🔍 Deep diving into: ${repo.name}`);
+          
+          // Commits
+          const commits = await this.getRepoCommits(username, repo.name, 5);
           const processedCommits = commits.map((commit) => ({
-            message: commit.commit.message,
-            date: commit.commit.author.date,
-            additions: commit.stats?.additions || 0,
-            deletions: commit.stats?.deletions || 0,
+             message: commit.commit.message,
+             date: commit.commit.author.date,
+             author: commit.commit.author.name
           }));
+          repoCommits.push({ repo: repo.name, commits: processedCommits });
+          
+          // Languages
+          try {
+            const languages = await this.getRepoLanguages(username, repo.name);
+            Object.entries(languages).forEach(([lang, bytes]) => {
+              languageStats[lang] = (languageStats[lang] || 0) + bytes;
+            });
+          } catch (e) {
+             console.log(`   ⚠️  No language data for ${repo.name}`);
+          }
+          
+          // Branches
+          let branches = [];
+          try {
+             const branchData = await this.getRepoBranches(username, repo.name);
+             branches = branchData.map(b => b.name);
+          } catch(e) { /* ignore */ }
 
-          repoCommits.push({
-            repo: repo.name,
-            commits: processedCommits,
+          // README
+          let readmeContent = null;
+          try {
+             const readme = await this.getRepoReadme(username, repo.name);
+             if (readme && readme.content) {
+                readmeContent = Buffer.from(readme.content, 'base64').toString('utf-8');
+                // Truncate to save tokens
+                if (readmeContent.length > 1000) {
+                   readmeContent = readmeContent.substring(0, 1000) + "...";
+                }
+             }
+          } catch(e) { /* ignore */ }
+
+          deepRepos.push({
+             name: repo.name,
+             description: repo.description,
+             language: repo.language,
+             stars: repo.stargazers_count,
+             forks: repo.forks_count,
+             size: repo.size,
+             created_at: repo.created_at,
+             updated_at: repo.updated_at,
+             topics: repo.topics || [],
+             branches: branches,
+             readme: readmeContent
           });
 
-          console.log(`   ✅ Found ${commits.length} commits in ${repo.name}`);
-          commits.slice(0, 3).forEach((commit, index) => {
-            console.log(
-              `      ${index + 1}. "${commit.commit.message
-                .split("\n")[0]
-                .substring(0, 50)}..."`
-            );
-          });
         } catch (error) {
-          console.log(
-            `   ⚠️  Could not fetch commits for ${repo.name}: ${error.message}`
-          );
+          console.log(`   ⚠️  Could not deep fetch ${repo.name}: ${error.message}`);
         }
       }
 
@@ -189,20 +293,6 @@ class GitHubService {
         return acc;
       }, {});
       console.log(`   Event breakdown:`, eventTypes);
-
-      // Analyze languages across repositories
-      console.log(`🔤 Analyzing programming languages...`);
-      const languageStats = {};
-      for (const repo of topRepos.slice(0, 10)) {
-        try {
-          const languages = await this.getRepoLanguages(username, repo.name);
-          Object.entries(languages).forEach(([lang, bytes]) => {
-            languageStats[lang] = (languageStats[lang] || 0) + bytes;
-          });
-        } catch (error) {
-          console.log(`   ⚠️  Could not fetch languages for ${repo.name}`);
-        }
-      }
 
       const sortedLanguages = Object.entries(languageStats)
         .sort(([, a], [, b]) => b - a)
@@ -217,16 +307,16 @@ class GitHubService {
       console.log(`${"=".repeat(60)}`);
       console.log(`🎯 Data gathering complete for ${username}!`);
       console.log(
-        `   📊 Stats: ${repos.length} repos, ${repoCommits.reduce(
+        `   📊 Stats: ${targetRepos.length} repos analyzed deep, ${repoCommits.reduce(
           (sum, rc) => sum + rc.commits.length,
           0
-        )} commits, ${events.length} events, ${
+        )} commits fetched, ${events.length} events, ${
           Object.keys(languageStats).length
         } languages`
       );
       console.log(`${"=".repeat(60)}`);
-
-      return {
+      
+      const gatheredData = {
         profile: {
           login: profile.login,
           name: profile.name,
@@ -240,18 +330,10 @@ class GitHubService {
           following: profile.following,
           created_at: profile.created_at,
           updated_at: profile.updated_at,
+          readme: profileReadme,
         },
-        repositories: repos.map((repo) => ({
-          name: repo.name,
-          description: repo.description,
-          language: repo.language,
-          stars: repo.stargazers_count,
-          forks: repo.forks_count,
-          size: repo.size,
-          created_at: repo.created_at,
-          updated_at: repo.updated_at,
-          topics: repo.topics || [],
-        })),
+        all_repository_names: repoNames,
+        repositories: deepRepos,
         commits: repoCommits,
         events: events.map((event) => ({
           type: event.type,
@@ -261,6 +343,8 @@ class GitHubService {
         })),
         languageStats,
       };
+
+      return gatheredData;
     } catch (error) {
       console.error(`Error gathering data for ${username}:`, error.message);
       throw error;

@@ -42,6 +42,12 @@ router.get("/:username", validateUsername, async (req, res) => {
 
     // Gather GitHub data
     const userData = await githubService.gatherUserData(username);
+    
+    console.log("\n🔥 ======================================================= 🔥");
+    console.log("                 FULL GITHUB PAYLOAD FETCHED                  ");
+    console.log("🔥 ======================================================= 🔥\n");
+    console.dir(userData, { depth: null, colors: true });
+    console.log("\n=======================================================\n");
 
     // Generate roast(s) with language support
     let roasts;

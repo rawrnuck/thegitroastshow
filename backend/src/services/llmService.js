@@ -1,40 +1,38 @@
 const OpenAI = require("openai");
+const { GoogleGenAI } = require("@google/genai");
 
 class LLMService {
   constructor() {
-    // OpenRouter configuration (commented out)
-    // if (!process.env.OPENROUTER_API_KEY) {
-    //   console.warn(
-    //     "⚠️  OPENROUTER_API_KEY not found. LLM features will be disabled."
-    //   );
-    //   this.client = null;
-    // } else {
-    //   this.client = new OpenAI({
-    //     baseURL: "https://openrouter.ai/api/v1",
-    //     apiKey: process.env.OPENROUTER_API_KEY,
-    //   });
-    //   console.log("🤖 OpenRouter LLM service initialized with DeepSeek R1");
-    // }
-
+    this.provider = process.env.LLM_PROVIDER?.toLowerCase() || "groq";
+    
     // Groq configuration
     console.log("🔍 Debug: GROQ_API_KEY exists:", !!process.env.GROQ_API_KEY);
-    console.log("🔍 This is the NEW LLM Service using Groq!");
     if (!process.env.GROQ_API_KEY) {
-      console.warn(
-        "⚠️  GROQ_API_KEY not found. LLM features will be disabled."
-      );
-      this.client = null;
+      console.warn("⚠️  GROQ_API_KEY not found. Groq LLM features will be disabled.");
+      this.groqClient = null;
     } else {
-      this.client = new OpenAI({
+      this.groqClient = new OpenAI({
         baseURL: "https://api.groq.com/openai/v1",
         apiKey: process.env.GROQ_API_KEY,
       });
       console.log("🤖 Groq LLM service initialized");
     }
+
+    // Gemini configuration
+    console.log("🔍 Debug: GEMINI_API_KEY exists:", !!process.env.GEMINI_API_KEY);
+    if (!process.env.GEMINI_API_KEY) {
+        console.warn("⚠️  GEMINI_API_KEY not found. Gemini LLM features will be disabled.");
+        this.geminiClient = null;
+    } else {
+        this.geminiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+         console.log("🤖 Gemini LLM service initialized");
+    }
+    
+    console.log(`🤖 Active LLM Provider: ${this.provider.toUpperCase()}`);
   }
 
   generateRoastPrompt(userData, language = "en") {
-    const { profile, repositories, commits, languageStats } = userData;
+    const { profile, repositories, commits, languageStats, all_repository_names } = userData;
 
     const languageMap = {
       en: "English",
@@ -48,9 +46,11 @@ class LLMService {
     };
     const targetLanguage = languageMap[language] || "English";
 
-    const totalRepos = repositories?.length || 0;
+    const totalRepos = all_repository_names?.length || 0;
+    const repoNamesSample = all_repository_names ? all_repository_names.slice(0, 10).join(", ") : "None";
+    
     const totalStars = repositories?.reduce(
-      (sum, repo) => sum + (repo.stargazers_count || 0),
+      (sum, repo) => sum + (repo.stars || 0),
       0
     ) || 0;
 
@@ -58,103 +58,145 @@ class LLMService {
       .sort((a, b) => languageStats[b] - languageStats[a])
       .slice(0, 3);
 
-    const recentCommits = commits?.slice(0, 5)?.map(commit => 
-      commit.commit?.message?.split('\n')[0] || "No message"
-    ) || [];
-
     // Enhanced roast prompt with better structure
-    const prompt = `You are the host of a savage comedy roast show called **The Git Roast Show**.  
-You roast the GitHub user strictly using the data provided below.
+    const prompt = `You are "The Roast Master" — the charismatic, witty host of **The Git Roast Show**, a live comedy roast show where you absolutely DESTROY developers based on their GitHub profiles. You talk like a real stand-up comedian — conversational, fluid, building up jokes with setups and punchlines. Think Kevin Hart meets Jeff Ross meets a senior engineer who's seen too much bad code.
 
-⚠️ RULES ⚠️  
-- Use ONLY the data given. No invented repos, stars, or commits.  
-- When mocking commits, always quote them with their repo name. Example: Repo "Portfolio" → commit "first commit".  
-- Never invent commit messages. If no commits exist, roast the emptiness.  
-- Roast must be 200–250 characters total, 7–10 sentences max.  
-- Each line ≤30 characters, punchy roast style.  
+⚠️ ABSOLUTE RULES ⚠️
+- Use ONLY the real data provided below. NEVER invent repos, stars, commits, or stats.
+- When quoting commit messages, ALWAYS mention the repo name. Example: "I looked at your repo 'Portfolio' and found a commit that just says 'first commit'... bro, that's not a commit, that's a cry for help."
+- If a repo has no commits, roast the emptiness.
+- Write in a CONVERSATIONAL, FLOWING style — like you're actually talking on stage. Long sentences, natural pauses, crowd interactions.
+- DO NOT write bullet points or short choppy lines. Write PARAGRAPHS of comedy.
+- The roast should be 400-600 words minimum. Make it a REAL performance.
 
-🎤 Format Rules:  
-- **Speech lines must contain ONLY the roast text.**  
-- **Do NOT include [SOUND:...] or stage directions in speech.**  
-- The frontend will handle sound effects separately.  
-- Place punchlines first, then let the frontend attach sound cues after.  
-- Do not output JSON arrays — just plain roast script text.  
+🎤 STRUCTURE (follow this flow naturally):
 
-Flow:  
-1. Intro with username.  
-2. Mid burns (repos, stars, commits).  
-3. Roast commit messages WITH repo names.  
-4. Language roast.  
-5. Poetry/rhyme (2–3 lines).  
-6. Brutal punchline.  
-7. Outro: "This was a joke roast—if it was real, you'd leave baked, overcooked, or burnt. But hey, kudos for surviving the flames."  
+1. **OPENING** (warm, sarcastic welcome):
+   Start with something like "Ladies and gentlemen, welcome to The Git Roast Show! Tonight we have a VERY special guest..." Build anticipation. Mention their username dramatically. If they have a bio, read it out loud and mock it.
 
-📊 User Data:  
-- Username: ${profile.login}  
-- Name: ${profile.name || "Anonymous Coder"}  
-- Bio: "${profile.bio || "No bio"}"  
-- Total Repositories: ${totalRepos}  
-- Total Stars: ${totalStars}  
-- Followers: ${profile.followers || 0}  
-- Following: ${profile.following || 0}  
-- Top Languages: ${topLanguages.join(", ") || "None"}  
-- Example Repos & Commits:  
-${repositories.slice(0, 5).map(r => {
-  const repoCommits = commits.filter(c => c.repo === r.name).slice(0, 3);
-  if (repoCommits.length === 0) return `- Repo "${r.name}" → no commits`;
-  return repoCommits.map(c => `- Repo "${r.name}" → commit "${c.commit?.message}"`).join("\n");
+2. **THE PROFILE ROAST** (2-3 paragraphs):
+   Mock their follower count, their bio, how long they've been on GitHub vs what they've actually accomplished. Compare their follower-to-following ratio. If they follow way more people than follow them back, that's comedy gold.
+
+3. **THE REPO ROAST** (2-3 paragraphs, the MEAT of the show):
+   Go through their repos one by one. Mock the names, the descriptions, the star counts. Quote their actual commit messages and tear them apart. If they have branches with weird names, mock those. If their README is generic or empty, roast that.
+
+4. **THE LANGUAGE ROAST** (1 paragraph):
+   Mock their programming language choices. Every language has stereotypes — use them.
+
+5. **THE POETIC BURN** (2-4 rhyming lines):
+   Drop a short roast poem/rap about them. Make it rhythmic and brutal.
+
+6. **THE CLOSER** (warm sendoff):
+   End with: "But seriously folks, ${profile.name || profile.login} — you're out here coding, pushing commits, and building things, and that's more than most people do from their couch. Keep going. This was The Git Roast Show — if this was a real roast, you'd leave baked, overcooked, or burnt. But hey, kudos for surviving the flames!"
+
+🎭 STAGE DIRECTIONS:
+Sprinkle these naturally throughout your script between sentences (not inside sentences):
+[SOUND:air horn] [SOUND:rimshot] [SOUND:crowd laughs] [SOUND:crowd gasps] [SOUND:applause] [SOUND:crickets] [SOUND:crowd boos] [SOUND:drops mic]
+
+📊 USER DATA:
+- Username: ${profile.login}
+- Name: ${profile.name || "Anonymous Coder"}
+- Bio: "${profile.bio || "No bio — they can't even describe themselves"}"
+- Profile README: "${profile.readme ? profile.readme.substring(0, 300).replace(/\n/g, ' ') + "..." : "None — not even a profile README, absolutely ghosting the world"}"
+- Account Created: ${profile.created_at} (${Math.floor((Date.now() - new Date(profile.created_at)) / (1000 * 60 * 60 * 24 * 365))} years on GitHub)
+- Public Repos: ${totalRepos}
+- Total Stars across analyzed repos: ${totalStars}
+- Followers: ${profile.followers || 0}
+- Following: ${profile.following || 0}
+- Top Languages: ${topLanguages.join(", ") || "None"}
+- All Known Repo Names: ${repoNamesSample}
+
+📂 DETAILED REPO BREAKDOWN:
+${repositories.map(r => {
+  const repoCommits = commits && commits.find(c => c.repo === r.name)?.commits?.slice(0, 5) || [];
+  let section = `\n🔹 Repo: "${r.name}"\n  Description: "${r.description || "No description"}"`;
+  section += `\n  Language: ${r.language || "Unknown"} | Stars: ${r.stars || 0} | Forks: ${r.forks || 0}`;
+  section += `\n  Branches: ${r.branches?.join(", ") || "none"}`;
+  if (r.readme) section += `\n  README Snippet: "${r.readme.substring(0, 100).replace(/\n/g, ' ')}..."`;
+  if (repoCommits.length === 0) {
+    section += `\n  Commits: NONE — absolutely empty, a ghost repo`;
+  } else {
+    section += `\n  Recent Commits:`;
+    repoCommits.forEach(c => {
+      section += `\n    → "${c.message.split('\n')[0]}" by ${c.author || "Unknown"} (${c.date})`;
+    });
+  }
+  return section;
 }).join("\n")}
 
-⚠️ IMPORTANT: Return ONLY the roast script as plain text with [SOUND:effect] tags. Do NOT return JSON or objects.`;
+⚠️ IMPORTANT: Return ONLY the roast script as plain flowing text with [SOUND:effect] tags between sentences. Do NOT return JSON, arrays, or bullet points. Write it like a REAL comedy script. Output your entire roast in ${targetLanguage}.`;
 
     return prompt;
   }
 
   async generateRoast(userData, language = "en") {
-    if (!this.client) {
-      return this.getFallbackRoast(userData.profile, language);
-    }
+    // If the selected provider client wasn't initialized, fallback
+    if (this.provider === "groq" && !this.groqClient) return this.getFallbackRoast(userData.profile, language);
+    if (this.provider === "gemini" && !this.geminiClient) return this.getFallbackRoast(userData.profile, language);
 
     const maxRetries = 3;
     const baseDelay = 1000; // 1 second
 
+    const systemPromptMessage = `You are the world's funniest stand-up comedian who specializes in roasting software developers. You have the charisma of Kevin Hart, the savage wit of Jeff Ross, and the technical knowledge of a 20-year senior engineer.
+
+Your style is CONVERSATIONAL and FLOWING — you speak in full, natural sentences with setups, pauses, callbacks, and punchlines. You NEVER write in short choppy bullet points. You write like you're actually performing live on stage in front of an audience.
+
+Every roast you write should:
+- Be 400-600 words minimum (a REAL performance, not a tweet)
+- Flow naturally like spoken comedy — long sentences, natural rhythm
+- Build jokes with proper setup → punchline structure  
+- Include crowd interaction moments and stage directions
+- Reference SPECIFIC data from the user's profile (real repo names, real commit messages, real stats)
+- Get progressively more savage as it goes on
+- End on a surprisingly warm, encouraging note
+
+Do NOT write short one-liners separated by line breaks. Write PARAGRAPHS of comedy like a real stand-up special transcript.`;
+
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       try {
         const prompt = this.generateRoastPrompt(userData, language);
+        
+        console.log("\n🤖 ======================================================= 🤖");
+        console.log("                   FORMULATED LLM PROMPT                       ");
+        console.log("🤖 ======================================================= 🤖\n");
+        console.log("SYSTEM:\n" + systemPromptMessage + "\n");
+        console.log("USER:\n" + prompt);
+        console.log("\n=======================================================\n");
 
-        const completion = await this.client.chat.completions.create({
-          // OpenRouter specific headers (commented out)
-          // extra_headers: {
-          //   "HTTP-Referer": "http://localhost:3001",
-          //   "X-Title": "RoastRepo",
-          // },
-          // extra_body: {},
-          model: "llama-3.1-8b-instant", // Groq model
-          messages: [
-            {
-              role: "system",
-              content: `You are a professional stand-up comedian and roast show host. Your job is to write DETAILED, HILARIOUS roast scripts.
+        let roast = "";
+        let usedModel = "";
 
-CRITICAL REQUIREMENTS:
-- Write AT LEAST 300-500 words per roast
-- Include multiple jokes about different aspects of their GitHub
-- Use specific stage directions: *adjusts mic*, *crowd laughs*, *crowd gasps*, *applause*, *crickets*, *crowd boos*, *rimshot*, *air horn*, *drops mic*
-- Be witty and clever, not just mean
-- Cover their bio, repos, commits, languages, stats in detail
-- Make it feel like a real comedy roast show
+        if (this.provider === "groq") {
+            usedModel = process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+            const completion = await this.groqClient.chat.completions.create({
+              model: usedModel,
+              messages: [
+                { role: "system", content: systemPromptMessage },
+                { role: "user", content: prompt },
+              ],
+              max_tokens: 4000,
+              temperature: 0.8,
+            });
+            roast = completion.choices?.[0]?.message?.content;
+        } else if (this.provider === "gemini") {
+            usedModel = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite-preview";
+            const response = await this.geminiClient.models.generateContent({
+                model: usedModel,
+                contents: prompt,
+                config: {
+                    systemInstruction: systemPromptMessage,
+                    temperature: 0.8,
+                }
+            });
+            roast = response.text;
+        }
 
-DO NOT write short, generic responses. This should be a FULL professional roast performance.`,
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          max_tokens: 2000,
-          temperature: 0.8,
-        });
-
-        const roast = completion.choices?.[0]?.message?.content;
+        console.log("\n🎙️ ======================================================= 🎙️");
+        console.log("                   GENERATED ROAST SCRIPT                      ");
+        console.log(`🎙️  Provider: ${this.provider.toUpperCase()} | Model: ${usedModel}`);
+        console.log("🎙️ ======================================================= 🎙️\n");
+        console.log(roast);
+        console.log("\n=======================================================\n");
 
         if (!roast || roast.trim().length === 0) {
           throw new Error("No roast generated from LLM.");
@@ -163,7 +205,8 @@ DO NOT write short, generic responses. This should be a FULL professional roast 
         return {
           roast: roast.trim(),
           fallback: false,
-          model: "llama-3.1-8b-instant", // Groq model
+          model: usedModel,
+          provider: this.provider,
           language: language,
           attempts: attempt + 1
         };
